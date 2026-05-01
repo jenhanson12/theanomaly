@@ -1548,7 +1548,7 @@ const SceneRenderer = (() => {
           for(let wx=bx+1;wx<bx+8;wx+=4)
             if(rr()<0.32) r(wx,wy,2,2,'#604010');
       }
-      dropRain(rr,5,6,84,54,40,C.vblue);
+      // rain drawn by animator
       // Window frame + mullions
       r(4,4,82,1,C.tan); r(4,55,82,1,C.tan);
       r(4,4,1,52,C.tan); r(85,4,1,52,C.tan);
@@ -1576,10 +1576,7 @@ const SceneRenderer = (() => {
       r(234,49,10,8,'#3a2010'); r(235,48,8,2,C.tan);
       cx.strokeStyle='#3a2010'; cx.lineWidth=1.2;
       cx.beginPath(); cx.arc(244,53,4,-Math.PI/2,Math.PI/2); cx.stroke();
-      cx.strokeStyle=C.lgrey; cx.lineWidth=0.7;
-      a(0.42,()=>[[233,47],[236,46],[239,47]].forEach(([sx,sy])=>{
-        cx.beginPath(); cx.moveTo(sx,sy); cx.quadraticCurveTo(sx-1,sy-4,sx+1,sy-8); cx.stroke();
-      }));
+      // steam drawn by animator
 
       // Filing cabinet far left
       r(0,16,18,42,C.mgrey);
@@ -2037,14 +2034,44 @@ const SceneAnimator = (() => {
   const CFG = {
     office: {
       emit() {
-        // Rain streaks within the left window (x:5-83, y:5-54)
-        if (particles.length < MAX_P && Math.random() < 0.35)
-          particles.push(mkP(6+Math.random()*76, 5+Math.random()*48, -0.4, 2.0, '#6aaad8', 0.10+Math.random()*0.14, 0.7, 0.972));
-        // Paper shimmer — very occasional
+        // Occasional paper shimmer drifting off desk
         if (particles.length < MAX_P && Math.random() < 0.025)
           particles.push(mkP(98+Math.random()*130, 36+Math.random()*9, (Math.random()-.5)*.1, -0.06, '#d8c898', 0.10, 2, 0.962));
       },
       extra(t) {
+        // — Animated rain streaks in window (x:5–84, y:5–54) —
+        ctx.save();
+        ctx.beginPath(); ctx.rect(5, 5, 79, 49); ctx.clip();
+        ctx.strokeStyle = '#5898c8'; ctx.lineWidth = 0.8;
+        for (let i = 0; i < 22; i++) {
+          const cy  = ((t * 38 + i * 3.7) % 54);   // each streak cycles through the window
+          const x   = 6 + (i * 3.6 % 74);           // spread across window width
+          const y   = 5 + cy;
+          const len = 5 + (i % 4);                   // 5–8px streak
+          ctx.globalAlpha = 0.10 + (i % 3) * 0.05;
+          ctx.beginPath();
+          ctx.moveTo(x, y); ctx.lineTo(x - 1, y + len);
+          ctx.stroke();
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
+
+        // — Animated steam rising from coffee mug (mug at x:234–244, y:49) —
+        ctx.lineWidth = 1.0;
+        [[234, 0], [238, 0.8], [242, 1.6]].forEach(([sx, phase]) => {
+          const riseT  = (t * 0.45 + phase) % 1;      // 0→1 as wisp rises and fades
+          const y      = 47 - riseT * 14;              // rises from y=47 to y=33
+          const sway   = Math.sin(t * 1.6 + phase) * 1.8;
+          ctx.globalAlpha = 0.48 * (1 - riseT);
+          ctx.strokeStyle = '#a8a8bc';
+          ctx.beginPath();
+          ctx.moveTo(sx + sway, y + 6);
+          ctx.quadraticCurveTo(sx - sway * 0.6, y + 2, sx + sway * 0.4, y - 4);
+          ctx.stroke();
+        });
+        ctx.globalAlpha = 1;
+
+        // — Desk lamp glow pulse —
         const glow = (Math.sin(t*5.8)+1)*.5*.033;
         ctx.globalAlpha = glow;
         const lg = ctx.createRadialGradient(161,34,0,161,34,38);
@@ -2107,17 +2134,30 @@ const SceneAnimator = (() => {
     },
     chinatown: {
       emit() {
-        // Occasional blue mote drifting upward from street (blue is weightless)
+        // Blue motes drifting up from street (blue has weight, sinks — then escapes)
         if (particles.length < MAX_P && Math.random() < 0.08)
-          particles.push(mkP(4+Math.random()*(NW-12), 58+Math.random()*16, (Math.random()-.5)*.2, -(0.3+Math.random()*.3), '#3070b8', 0.08+Math.random()*.10, 2+Math.random()*3, 0.988));
+          particles.push(mkP(4+Math.random()*(NW-12), 58+Math.random()*14, (Math.random()-.5)*.2, -(0.28+Math.random()*.28), '#3070b8', 0.09+Math.random()*.10, 2+Math.random()*3, 0.988));
       },
       extra(t) {
-        // Lantern flicker — warm pulse over the lantern zone
-        const f = 0.06 + Math.sin(t*6.4)*0.05 + Math.sin(t*11.1)*0.02;
-        ctx.globalAlpha = Math.max(0, f);
-        ctx.fillStyle = '#c03008';
-        ctx.fillRect(0,38,NW,22);
-        ctx.globalAlpha = 1;
+        // Per-lantern flicker — each one pulses at its own phase
+        // Wire 1: lx=10,26,42... step 16, glow centre y≈45
+        for (let i=0, lx=10; lx<NW; lx+=16, i++) {
+          const f = 0.28 + Math.sin(t*8.4+i*1.9)*0.14 + Math.sin(t*13.2+i*0.8)*0.06;
+          ctx.globalAlpha = Math.max(0.10, f);
+          const lg = ctx.createRadialGradient(lx,45,0,lx,45,8);
+          lg.addColorStop(0,'rgba(210,70,15,0.90)'); lg.addColorStop(1,'rgba(210,70,15,0)');
+          ctx.fillStyle = lg; ctx.fillRect(lx-8,40,16,13);
+          ctx.globalAlpha = 1;
+        }
+        // Wire 2: lx=18,34,50... step 16, glow centre y≈53
+        for (let i=0, lx=18; lx<NW; lx+=16, i++) {
+          const f = 0.18 + Math.sin(t*9.0+i*1.4)*0.10 + Math.sin(t*14.8+i*1.0)*0.04;
+          ctx.globalAlpha = Math.max(0.06, f);
+          const lg = ctx.createRadialGradient(lx,53,0,lx,53,6);
+          lg.addColorStop(0,'rgba(180,50,10,0.80)'); lg.addColorStop(1,'rgba(180,50,10,0)');
+          ctx.fillStyle = lg; ctx.fillRect(lx-6,49,12,10);
+          ctx.globalAlpha = 1;
+        }
       }
     },
     uptown: {
