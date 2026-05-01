@@ -2223,8 +2223,10 @@ const SceneAnimator = (() => {
 const Music = (() => {
   let ctx = null, master = null, verb = null;
   let muted = false, beat = 0, nextBeat = 0;
-  const TEMPO = 50;          // BPM — slow, heavy, brooding
-  const SPB   = 60 / TEMPO; // seconds per beat
+  let noiseBuffer = null;  // shared noise buffer for percussion + breath
+  let rideSrc = null;      // looping brushed ride cymbal
+  const TEMPO = 48;         // BPM — slow, heavy, brooding
+  const SPB   = 60 / TEMPO;
 
   // Note frequencies (Hz)
   const N = {
@@ -2237,27 +2239,23 @@ const Music = (() => {
     Eb5:622.25, E5:659.25,
   };
 
-  // Walking bass — tritone leaps, chromatic approach notes, direction changes.
-  // null = rest (silence is part of the feel).
-  // 16 beats across 4 bars: Am(b5) → chromatic descent → Dm9 → E7b9 tritone sub
+  // Walking bass — tritone leaps, chromatic approach notes, rests
   const BASS = [
-    N.A2,  N.Eb3, N.D3,  N.C3,   // bar 1: tritone leap up, then descend
-    N.B2,  N.Bb2, N.A2,  null,   // bar 2: chromatic creep down, breath
-    N.D3,  N.Ab3, N.G3,  N.F3,   // bar 3: Dm with tritone colour
-    N.E3,  N.Bb2, N.B2,  N.A2,   // bar 4: tritone sub E→Bb, chromatic home
+    N.A2,  N.Eb3, N.D3,  N.C3,
+    N.B2,  N.Bb2, N.A2,  null,
+    N.D3,  N.Ab3, N.G3,  N.F3,
+    N.E3,  N.Bb2, N.B2,  N.A2,
   ];
 
-  // Chord events scheduled relative to phrase start (beat 0).
-  // Syncopated — NOT on every bar downbeat.
+  // Chord events — syncopated, NOT on every downbeat
   const CHORD_EVS = [
-    { b: 0,    fs: [N.A3,N.C4,N.E4,N.G4],         dur: 4.0, vol: 0.048 }, // Am7  on 1
-    { b: 2.5,  fs: [N.A3,N.C4,N.Eb4,N.G4],        dur: 1.8, vol: 0.022 }, // Am7#11 ghost — syncopated
-    { b: 8,    fs: [N.D3,N.F3,N.A3,N.C4],          dur: 3.5, vol: 0.048 }, // Dm7  on 1 of bar 3
-    { b: 13.5, fs: [N.E3,N.Ab3,N.Bb3,N.D4],        dur: 3.0, vol: 0.052 }, // E7b9 syncopated late
+    { b: 0,    fs: [N.A3,N.C4,N.E4,N.G4],       dur: 4.0, vol: 0.048 }, // Am7
+    { b: 2.5,  fs: [N.A3,N.C4,N.Eb4,N.G4],      dur: 1.8, vol: 0.020 }, // Am7#11 ghost
+    { b: 8,    fs: [N.D3,N.F3,N.A3,N.C4],        dur: 3.5, vol: 0.048 }, // Dm7
+    { b: 13.5, fs: [N.E3,N.Ab3,N.Bb3,N.D4],      dur: 3.0, vol: 0.050 }, // E7b9
   ];
 
-  // Melody — harmon-muted trumpet feel. Very sparse, long notes.
-  // Each entry: beat position in phrase, frequency, duration in beats.
+  // Melody — tenor saxophone, sparse long notes
   const MEL_EVS = [
     { b: 1,    f: N.E5,  d: 2.4 },
     { b: 5.5,  f: N.D5,  d: 1.8 },
@@ -2265,40 +2263,71 @@ const Music = (() => {
     { b: 13,   f: N.B4,  d: 2.0 },
   ];
 
-  // Subtle random timing nudge — keeps it from sounding like a machine
   const jitter = () => (Math.random() - 0.5) * 0.022;
 
   function makeReverb() {
     const conv = ctx.createConvolver();
-    const sr = ctx.sampleRate, len = Math.floor(sr * 3.2);
+    const sr = ctx.sampleRate, len = Math.floor(sr * 3.6);
     const buf = ctx.createBuffer(2, len, sr);
     for (let c = 0; c < 2; c++) {
       const d = buf.getChannelData(c);
       for (let i = 0; i < len; i++)
-        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.35);
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.2);
     }
     conv.buffer = buf;
     return conv;
   }
 
-  // Upright bass — sawtooth through a tight lowpass
-  function playBass(freq, t) {
-    t += jitter();
-    const osc = ctx.createOscillator();
-    const lp  = ctx.createBiquadFilter();
-    const g   = ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.value = freq;
-    lp.type = 'lowpass'; lp.frequency.value = 250; lp.Q.value = 0.5;
-    const dur = SPB * 0.76;
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.2, t + 0.028);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    osc.connect(lp); lp.connect(g); g.connect(master);
-    osc.start(t); osc.stop(t + dur + 0.04);
+  function makeNoiseBuffer(seconds) {
+    const sr = ctx.sampleRate;
+    const len = Math.floor(sr * seconds);
+    const buf = ctx.createBuffer(1, len, sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
   }
 
-  // Piano chord — stacked sine harmonics, long decay, all through reverb
+  // Upright bass — sine body + 2nd harmonic + brief noise pluck transient
+  function playBass(freq, t) {
+    t += jitter();
+    const dur = SPB * 0.68;
+
+    const osc  = ctx.createOscillator();  // fundamental
+    const osc2 = ctx.createOscillator();  // 2nd harmonic (body)
+    const g2   = ctx.createGain();
+    const lp   = ctx.createBiquadFilter();
+    const g    = ctx.createGain();
+
+    osc.type = 'sine'; osc.frequency.value = freq;
+    osc2.type = 'sine'; osc2.frequency.value = freq * 2;
+    g2.gain.value = 0.12;
+
+    lp.type = 'lowpass'; lp.frequency.value = 320; lp.Q.value = 0.5;
+
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.30, t + 0.010);   // fast pluck attack
+    g.gain.exponentialRampToValueAtTime(0.10, t + 0.07); // quick decay to sustain
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+    osc.connect(lp); osc2.connect(g2); g2.connect(lp);
+    lp.connect(g); g.connect(master);
+
+    // Noise pluck transient — gives it the "thwack" of a plucked string
+    const ns = ctx.createBufferSource();
+    ns.buffer = noiseBuffer;
+    const nbp = ctx.createBiquadFilter();
+    nbp.type = 'bandpass'; nbp.frequency.value = freq * 2.2; nbp.Q.value = 1.8;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.07, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.042);
+    ns.connect(nbp); nbp.connect(ng); ng.connect(master);
+    ns.start(t); ns.stop(t + 0.05);
+
+    osc.start(t); osc.stop(t + dur + 0.05);
+    osc2.start(t); osc2.stop(t + dur + 0.05);
+  }
+
+  // Piano chord — stacked sine harmonics, long decay, through reverb
   function playChord(freqs, t, durBeats, vol) {
     t += jitter();
     const dur = durBeats * SPB;
@@ -2310,51 +2339,108 @@ const Music = (() => {
         osc.frequency.value = freq * h;
         const v = vol / Math.pow(i + 1, 1.5);
         g.gain.setValueAtTime(0, t);
-        g.gain.linearRampToValueAtTime(v, t + 0.014);
-        g.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.82);
+        g.gain.linearRampToValueAtTime(v, t + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.80);
         osc.connect(g); g.connect(verb);
         osc.start(t); osc.stop(t + dur);
       });
     });
   }
 
-  // Muted trumpet — triangle wave + vibrato LFO, slow attack, lots of reverb
-  function playTrumpet(freq, t, durBeats) {
+  // Tenor saxophone — sawtooth through reed formants + breath noise + delayed vibrato
+  function playSax(freq, t, durBeats) {
     t += jitter();
     const dur = durBeats * SPB;
+
     const osc  = ctx.createOscillator();
     const lfo  = ctx.createOscillator();
     const lfog = ctx.createGain();
-    const bp   = ctx.createBiquadFilter(); // nasal bandpass colour
+    const hp   = ctx.createBiquadFilter();  // remove sub rumble
+    const f1   = ctx.createBiquadFilter();  // reed body formant ~700Hz
+    const f2   = ctx.createBiquadFilter();  // upper brilliance ~2200Hz
     const g    = ctx.createGain();
-    const gDry = ctx.createGain();
 
-    osc.type = 'triangle';
+    osc.type = 'sawtooth';
     osc.frequency.value = freq;
 
-    // Vibrato: ~5 Hz, ±0.6%
-    lfo.type = 'sine'; lfo.frequency.value = 5.1;
-    lfog.gain.value = freq * 0.006;
+    // Vibrato — delayed onset, kicks in ~1/3 through the note
+    lfo.type = 'sine'; lfo.frequency.value = 5.4;
+    lfog.gain.setValueAtTime(0, t);
+    lfog.gain.setValueAtTime(0, t + dur * 0.30);
+    lfog.gain.linearRampToValueAtTime(freq * 0.013, t + dur * 0.52);
     lfo.connect(lfog); lfog.connect(osc.frequency);
 
-    // Bandpass adds harmon-mute nasality
-    bp.type = 'bandpass'; bp.frequency.value = freq * 1.8; bp.Q.value = 1.2;
+    hp.type = 'highpass'; hp.frequency.value = 110; hp.Q.value = 0.5;
+    f1.type = 'bandpass'; f1.frequency.value = 700; f1.Q.value = 2.8;
+    f2.type = 'peaking';  f2.frequency.value = 2200; f2.gain.value = 6; f2.Q.value = 1.3;
 
-    // Slow attack, long tail
+    // Slow breath attack, sustain, gentle release
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.06, t + 0.12);
-    g.gain.setValueAtTime(0.06, t + dur * 0.55);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.96);
+    g.gain.linearRampToValueAtTime(0.09, t + 0.18);
+    g.gain.setValueAtTime(0.09, t + dur * 0.60);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.94);
 
-    // Dry signal mixed lower
-    gDry.gain.value = 0.35;
+    osc.connect(hp); hp.connect(f1); f1.connect(f2); f2.connect(g);
+    g.connect(verb);
+    const dryG = ctx.createGain(); dryG.gain.value = 0.20;
+    g.connect(dryG); dryG.connect(master);
 
-    osc.connect(bp); bp.connect(g);
-    g.connect(verb);        // wet — through reverb
-    g.connect(gDry); gDry.connect(master); // dry — direct
+    // Breath noise — the whisper under the reed
+    const ns = ctx.createBufferSource();
+    ns.buffer = noiseBuffer;
+    const nbp = ctx.createBiquadFilter();
+    nbp.type = 'bandpass'; nbp.frequency.value = 2600; nbp.Q.value = 1.8;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0, t);
+    ng.gain.linearRampToValueAtTime(0.007, t + 0.10);
+    ng.gain.linearRampToValueAtTime(0.004, t + dur * 0.65);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.92);
+    ns.connect(nbp); nbp.connect(ng); ng.connect(verb);
+    ns.start(t); ns.stop(t + dur);
 
     lfo.start(t); lfo.stop(t + dur + 0.1);
     osc.start(t); osc.stop(t + dur + 0.1);
+  }
+
+  // Continuous brushed ride cymbal — the backbone of the jazz feel
+  function startRide() {
+    if (rideSrc) return;
+    rideSrc = ctx.createBufferSource();
+    rideSrc.buffer = noiseBuffer;
+    rideSrc.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 7500; hp.Q.value = 0.4;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 16000;
+    const g = ctx.createGain();
+    g.gain.value = 0.020; // very soft shimmer
+    rideSrc.connect(hp); hp.connect(lp); lp.connect(g); g.connect(master);
+    rideSrc.start();
+  }
+
+  // Ghost brush snare — on beats 4 and 12 (every 2 bars, backbeat feel)
+  function playBrushSnare(t) {
+    t += jitter() * 0.3;
+    // Snare body: bandpass noise
+    const ns1 = ctx.createBufferSource(); ns1.buffer = noiseBuffer;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 210; bp.Q.value = 1.0;
+    const g1 = ctx.createGain();
+    g1.gain.setValueAtTime(0, t);
+    g1.gain.linearRampToValueAtTime(0.030, t + 0.005);
+    g1.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+    ns1.connect(bp); bp.connect(g1); g1.connect(master);
+    // Wire sizzle: highpass noise
+    const ns2 = ctx.createBufferSource(); ns2.buffer = noiseBuffer;
+    const szhp = ctx.createBiquadFilter();
+    szhp.type = 'highpass'; szhp.frequency.value = 3800; szhp.Q.value = 0.5;
+    const g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0, t);
+    g2.gain.linearRampToValueAtTime(0.016, t + 0.003);
+    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    ns2.connect(szhp); szhp.connect(g2); g2.connect(master);
+    ns1.start(t); ns1.stop(t + 0.15);
+    ns2.start(t); ns2.stop(t + 0.10);
   }
 
   function schedule() {
@@ -2363,14 +2449,17 @@ const Music = (() => {
     while (nextBeat < now + 0.3) {
       const b = beat % 16;
 
-      // Walking bass every beat (nulls = rest)
+      // Walking bass every beat (null = rest)
       if (BASS[b] !== null) playBass(BASS[b], nextBeat);
 
-      // On phrase downbeat, schedule all chords + melody for this phrase
+      // Ghost snare on backbeats of bars 1 and 3
+      if (b === 3 || b === 11) playBrushSnare(nextBeat);
+
+      // On phrase downbeat, schedule all chords + melody
       if (b === 0) {
         const p = nextBeat;
         CHORD_EVS.forEach(ev => playChord(ev.fs, p + ev.b * SPB, ev.dur, ev.vol));
-        MEL_EVS.forEach(ev => playTrumpet(ev.f, p + ev.b * SPB, ev.d));
+        MEL_EVS.forEach(ev => playSax(ev.f, p + ev.b * SPB, ev.d));
       }
 
       nextBeat += SPB;
@@ -2392,9 +2481,11 @@ const Music = (() => {
       master.gain.value = 0.75;
       verb   = makeReverb();
       const vg = ctx.createGain();
-      vg.gain.value = 0.42;
+      vg.gain.value = 0.46;
       verb.connect(vg); vg.connect(master);
       master.connect(ctx.destination);
+      noiseBuffer = makeNoiseBuffer(2.0);
+      startRide();
       nextBeat = ctx.currentTime + 0.5;
       beat     = 0;
       schedule();
