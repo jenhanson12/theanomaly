@@ -1,0 +1,2551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THE ANOMALY — A Noir Investigation</title>
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #07070f;
+  --panel: #0c0c1a;
+  --panel2: #101020;
+  --gold: #d4a843;
+  --gold-bright: #f0c060;
+  --gold-dim: #cc9632;
+  --gold-glow: rgba(212,168,67,0.10);
+  --red: #c23b22;
+  --red-dim: rgba(194,59,34,0.15);
+  --border: #18182e;
+  --border-gold: #3a2a0e;
+  --text: #c8a040;
+  --text-dim: #c8922a;
+  --text-muted: #d4a843;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+html, body {
+  width:100%; height:100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Share Tech Mono', 'Courier New', monospace;
+  overflow: hidden;
+}
+
+/* ── Film grain ── */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  background-size: 300px 300px;
+  pointer-events:none; z-index:900; opacity:0.55;
+}
+
+/* ── Scanlines ── */
+body::after {
+  content:'';
+  position:fixed; inset:0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+  pointer-events:none; z-index:899;
+}
+
+/* Rain canvas */
+#rain {
+  position:fixed; inset:0; z-index:1; pointer-events:none;
+  opacity:0.22; transition:opacity 1.5s ease;
+}
+#rain.in-game { opacity:0.08; }
+
+/* ══════════════════════════════════
+   API KEY SCREEN
+══════════════════════════════════ */
+#api-screen {
+  position:fixed; inset:0;
+  /* No background — body's dark colour + rain canvas show through */
+  display:flex; align-items:center; justify-content:center;
+  flex-direction:column; gap:1.4rem;
+  z-index:800;
+}
+
+.splash-title {
+  font-family:'Special Elite', serif;
+  font-size: clamp(4rem, 9vw, 7rem);
+  color: var(--gold-bright);
+  letter-spacing:0.18em;
+  text-shadow:
+    0 0 30px rgba(240,192,96,0.7),
+    0 0 80px rgba(212,168,67,0.35),
+    0 0 160px rgba(212,168,67,0.15);
+  text-align:center;
+  animation: titleFlicker 9s ease-in-out infinite;
+}
+
+@keyframes titleFlicker {
+  0%, 93%, 100% { opacity:1; }
+  94%  { opacity:0.88; }
+  95%  { opacity:1; }
+  97%  { opacity:0.82; }
+  98%  { opacity:1; }
+}
+
+.splash-sub {
+  font-size:1rem;
+  color: var(--text-muted);
+  letter-spacing:0.28em;
+  text-transform:uppercase;
+  text-align:center;
+}
+
+.splash-tagline {
+  font-size:0.95rem;
+  color: var(--text-dim);
+  font-style:italic;
+  text-align:center;
+  max-width:420px;
+  line-height:1.8;
+  letter-spacing:0.03em;
+}
+
+.splash-divider {
+  width:min(420px,85vw);
+  height:1px;
+  background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+  margin: 0.3rem 0;
+}
+
+.api-box {
+  background: rgba(12,12,26,0.92);
+  border:1px solid var(--gold-dim);
+  padding:1.8rem;
+  width:min(440px,90vw);
+  display:flex; flex-direction:column; gap:0.9rem;
+  box-shadow: 0 0 60px rgba(0,0,0,0.8), inset 0 0 30px rgba(0,0,0,0.3);
+}
+
+.api-label {
+  font-size:0.78rem; letter-spacing:0.2em;
+  text-transform:uppercase; color:var(--text-muted);
+}
+
+.api-input {
+  width:100%; background:var(--bg);
+  border:1px solid var(--border-gold);
+  color:var(--gold);
+  font-family:inherit; font-size:0.82rem;
+  padding:0.55rem 0.75rem; outline:none;
+  letter-spacing:0.04em;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.api-input:focus { border-color:var(--gold-dim); box-shadow:0 0 12px var(--gold-glow); }
+.api-input.error { border-color:var(--red) !important; }
+
+.api-warning {
+  font-size:0.78rem; color:var(--text-dim); line-height:1.6;
+}
+
+.btn {
+  background:transparent;
+  border:1px solid var(--gold-dim);
+  color:var(--gold); font-family:inherit;
+  font-size:0.72rem; letter-spacing:0.15em;
+  text-transform:uppercase;
+  padding:0.55rem 1rem; cursor:pointer;
+  transition: all 0.2s; white-space:nowrap;
+}
+.btn:hover:not(:disabled) {
+  background:var(--gold-glow);
+  border-color:var(--gold);
+  box-shadow:0 0 16px var(--gold-glow);
+}
+.btn:disabled { opacity:0.4; cursor:default; }
+.btn-primary { border-color:var(--gold); color:var(--gold-bright); }
+.btn-primary:hover:not(:disabled) { background:rgba(212,168,67,0.12); }
+.btn-resume { border-color:var(--border-gold); color:var(--text-dim); font-size:0.65rem; letter-spacing:0.1em; }
+.btn-resume:hover:not(:disabled) { background:rgba(212,168,67,0.06); color:var(--text); }
+.splash-start-row { display:flex; flex-direction:column; align-items:center; gap:0.6rem; }
+.save-hint { font-size:0.62rem; color:var(--text-dim); opacity:0.65; letter-spacing:0.08em; }
+
+/* ══════════════════════════════════
+   GAME LAYOUT
+══════════════════════════════════ */
+#game {
+  display:none; height:100vh;
+  flex-direction:column;
+}
+#game.active { display:flex; }
+
+/* Header */
+#hdr {
+  flex-shrink:0;
+  display:flex; align-items:center;
+  justify-content:space-between;
+  padding:0.5rem 1rem;
+  border-bottom:1px solid var(--border);
+  background:var(--panel);
+  min-height:40px;
+}
+
+.hdr-title {
+  font-family:'Special Elite', serif;
+  font-size:1.1rem; color:var(--gold-bright);
+  letter-spacing:0.2em;
+  text-shadow:0 0 20px rgba(240,192,96,0.4);
+}
+
+.hdr-loc {
+  font-size:0.65rem; letter-spacing:0.2em;
+  text-transform:uppercase; color:var(--text-muted);
+}
+
+.hdr-right {
+  display:flex; gap:0.5rem; align-items:center;
+}
+
+.cache-badge {
+  font-size:0.6rem; letter-spacing:0.1em;
+  color:var(--gold-dim); opacity:0;
+  transition:opacity 0.5s;
+}
+.cache-badge.visible { opacity:1; }
+
+/* Main 3-column grid */
+#main {
+  flex:1; display:grid;
+  grid-template-columns:190px 1fr 190px;
+  overflow:hidden;
+  min-height:0;
+}
+
+/* ── Left Panel ── */
+#left-panel {
+  background:var(--panel);
+  border-right:1px solid var(--border);
+  padding:0.7rem 0.6rem;
+  display:flex; flex-direction:column; gap:0.55rem;
+  overflow-y:auto;
+}
+
+/* Section that grows to fill remaining panel height */
+.pnl-grow { flex: 1; min-height: 0; }
+
+/* Section boxes — both panels */
+#left-panel > div, #right-panel > div {
+  border:1px solid rgba(212,168,67,0.18);
+  border-radius:2px;
+  padding:0.55rem 0.65rem;
+}
+
+.pnl-title {
+  font-size:0.78rem; letter-spacing:0.2em;
+  text-transform:uppercase; color:var(--text-dim);
+  border-left:2px solid var(--gold-dim);
+  padding-left:0.45rem;
+  padding-bottom:0.3rem;
+  border-bottom:1px solid rgba(212,168,67,0.15);
+  margin-bottom:0.4rem;
+}
+
+.loc-name {
+  font-size:0.9rem; color:var(--gold-bright);
+  line-height:1.4; margin-bottom:0.45rem;
+  font-family:'Special Elite', serif;
+}
+
+.anomaly-tag {
+  font-size:0.74rem; color:var(--red);
+  line-height:1.5; padding:0.3rem 0.4rem;
+  border-left:2px solid rgba(194,59,34,0.4);
+  background:var(--red-dim);
+}
+
+.npc-name { font-size:0.92rem; color:var(--gold-dim); }
+.npc-role { font-size:0.82rem; color:var(--text-dim); line-height:1.5; margin-top:0.2rem; }
+
+.exit-btn {
+  display:block; width:100%;
+  background:transparent; border:1px solid transparent;
+  color:var(--text-dim); font-family:inherit;
+  font-size:0.88rem; letter-spacing:0.08em;
+  padding:0.32rem 0.4rem; cursor:pointer;
+  text-align:left; transition:all 0.15s;
+}
+.exit-btn:hover { color:var(--gold); border-color:var(--border-gold); background:var(--gold-glow); }
+.exit-btn.locked { opacity:0.35; cursor:default; }
+.exit-btn.locked:hover { color:var(--text-dim); border-color:transparent; background:transparent; }
+
+
+/* ── Narrative ── */
+#narrative {
+  display:flex; flex-direction:column;
+  overflow:hidden; position:relative;
+}
+
+/* Scene pixel-art canvas */
+#scene-wrap {
+  flex-shrink:0;
+  border-bottom:1px solid rgba(212,168,67,0.15);
+  background:#000;
+  line-height:0;
+}
+#scene-canvas {
+  display:block;
+  width:100%;
+  height:auto;     /* intrinsic 320×80 ratio maintained */
+  image-rendering:pixelated;
+  image-rendering:crisp-edges;
+  opacity:0; transition:opacity 0.6s ease;
+}
+#scene-canvas.ready { opacity:1; }
+
+#narrative-text {
+  flex:1; overflow-y:auto;
+  padding:1.1rem 1.3rem;
+  scroll-behavior:smooth;
+}
+
+.n-entry {
+  margin-bottom:1.4rem;
+  padding-bottom:1.4rem;
+  border-bottom:1px solid var(--border);
+  animation:fadeUp 0.35s ease;
+}
+.n-entry:last-child { border-bottom:none; }
+
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(6px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+.n-action {
+  font-size:0.72rem; letter-spacing:0.12em;
+  color:var(--text-dim); text-transform:uppercase;
+  margin-bottom:0.55rem;
+}
+.n-action::before { content:'› '; color:var(--gold-dim); }
+
+.n-text {
+  font-size:0.97rem; line-height:1.85;
+  color:var(--text); white-space:pre-wrap;
+}
+
+.n-text.error { color:var(--red); }
+
+.n-clue-found {
+  margin-top:0.6rem;
+  font-size:0.7rem; color:var(--red);
+  letter-spacing:0.08em;
+  animation:clueFlash 0.6s ease;
+}
+@keyframes clueFlash {
+  0% { opacity:0; transform:translateX(-4px); }
+  100% { opacity:1; transform:translateX(0); }
+}
+
+/* Typing cursor */
+.cursor {
+  display:inline-block; width:0.5em; height:0.85em;
+  background:var(--gold); margin-left:2px;
+  vertical-align:text-bottom;
+  animation:blink 0.9s infinite;
+}
+@keyframes blink {
+  0%,100% { opacity:1; } 50% { opacity:0; }
+}
+
+/* Loading dots */
+.dots { display:inline-flex; gap:4px; padding:0.3rem 0; }
+.dots span {
+  width:5px; height:5px; background:var(--gold-dim);
+  border-radius:50%; animation:dotPulse 1.3s infinite;
+}
+.dots span:nth-child(2) { animation-delay:0.22s; }
+.dots span:nth-child(3) { animation-delay:0.44s; }
+@keyframes dotPulse {
+  0%,100% { opacity:0.2; transform:scale(0.75); }
+  50%      { opacity:1;   transform:scale(1.2); }
+}
+
+/* ── Right Panel ── */
+#right-panel {
+  background:var(--panel);
+  border-left:1px solid var(--border);
+  padding:0.7rem 0.6rem;
+  display:flex; flex-direction:column; gap:0.55rem;
+  overflow-y:auto;
+}
+
+.clue-chip {
+  font-size:0.88rem; color:var(--text-muted);
+  padding:0.28rem 0.4rem;
+  border-left:2px solid rgba(194,59,34,0.35);
+  line-height:1.5; cursor:help;
+  transition:all 0.15s;
+  background:transparent;
+}
+.clue-chip:hover { color:var(--text); background:var(--red-dim); border-left-color:var(--red); }
+.clue-chip .dot { color:var(--red); margin-right:0.3em; }
+
+.inv-chip {
+  font-size:0.88rem; color:var(--text-dim);
+  padding:0.25rem 0.4rem;
+  border-left:2px solid var(--border); line-height:1.5;
+}
+
+.meter-wrap { margin-top:0.3rem; }
+.meter-label { font-size:0.74rem; color:var(--text-dim); letter-spacing:0.08em; margin-bottom:0.3rem; }
+.meter-bar { height:3px; background:var(--border); overflow:hidden; }
+.meter-fill {
+  height:100%;
+  background:linear-gradient(90deg, var(--red), var(--gold));
+  transition:width 0.6s ease;
+}
+
+.visited-item { font-size:0.84rem; color:var(--text-dim); padding:0.1rem 0; }
+.visited-item.cur { color:var(--text-muted); }
+
+.empty-hint { font-size:0.78rem; color:var(--text-dim); font-style:italic; }
+
+/* ── Input Bar ── */
+#input-bar {
+  flex-shrink:0; display:flex;
+  border-top:2px solid var(--border-gold);
+  border-bottom:2px solid var(--border-gold);
+  background:var(--panel2);
+  align-items:center;
+  margin:0 0.8rem 0.7rem;
+  border-radius:2px;
+}
+
+.prompt-glyph {
+  padding:0.9rem 0.7rem 0.9rem 1rem;
+  color:var(--gold); font-size:1rem;
+  user-select:none; flex-shrink:0;
+}
+
+#cmd {
+  flex:1; background:transparent; border:none;
+  color:var(--gold-bright); font-family:inherit; font-size:0.96rem;
+  padding:0.9rem 0; outline:none; caret-color:var(--gold);
+}
+#cmd::placeholder { color:var(--text-muted); font-size:0.88rem; }
+#cmd:disabled { opacity:0.4; }
+
+#send-btn { margin:0.5rem 0.6rem; padding:0.45rem 1rem; font-size:0.72rem; }
+
+/* ══════════════════════════════════
+   OVERLAY
+══════════════════════════════════ */
+#overlay {
+  display:none; position:fixed; inset:0;
+  background:rgba(7,7,15,0.96); z-index:700;
+  align-items:center; justify-content:center;
+  flex-direction:column; gap:1.5rem; padding:2rem;
+  text-align:center;
+}
+#overlay.active { display:flex; }
+
+.ov-title {
+  font-family:'Special Elite', serif;
+  font-size:clamp(1.5rem,4vw,2.5rem);
+  color:var(--gold-bright);
+  text-shadow:0 0 30px rgba(240,192,96,0.4);
+}
+
+.ov-text {
+  max-width:580px; color:var(--text);
+  line-height:1.85; font-size:0.82rem;
+  white-space:pre-wrap;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width:3px; }
+::-webkit-scrollbar-track { background:var(--bg); }
+::-webkit-scrollbar-thumb { background:var(--border-gold); border-radius:2px; }
+
+/* Responsive */
+@media (max-width:760px) {
+  #main { grid-template-columns:1fr; grid-template-rows:auto 1fr; }
+  #left-panel { flex-direction:row; flex-wrap:wrap; max-height:140px; gap:0.6rem; border-right:none; border-bottom:1px solid var(--border); }
+  #right-panel { display:none; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="rain"></canvas>
+
+<!-- ═══════ API KEY SCREEN ═══════ -->
+<div id="api-screen">
+  <div class="splash-title">THE ANOMALY</div>
+  <div class="splash-sub">A Noir Investigation &nbsp;·&nbsp; City of Perdition</div>
+  <div class="splash-tagline">The city is losing its mind.<br>One law of physics at a time.</div>
+  <div class="splash-divider"></div>
+  <div class="api-box">
+    <div class="api-label">Anthropic API Key</div>
+    <input class="api-input" id="api-key" type="password"
+           placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
+    <div class="api-warning">
+      Your key goes directly to the Anthropic API and is never stored anywhere.
+      Close this tab when you're done.
+    </div>
+    <div class="splash-start-row">
+      <button class="btn btn-primary" onclick="startGame(false)">Begin Investigation</button>
+      <button class="btn btn-resume" id="resume-btn" onclick="startGame(true)" style="display:none">↩ Resume Previous Case</button>
+      <div class="save-hint" id="save-hint" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ GAME ═══════ -->
+<div id="game">
+
+  <!-- Header -->
+  <div id="hdr">
+    <div class="hdr-title">⊗ THE ANOMALY</div>
+    <div class="hdr-loc" id="hdr-loc">The Precinct</div>
+    <div class="hdr-right">
+      <span class="cache-badge" id="cache-badge">⚡ cached</span>
+      <button class="btn" id="music-btn" onclick="Music.toggle()" style="padding:0.3rem 0.6rem;font-size:0.6rem;" title="Toggle music">♪ MUSIC</button>
+      <button class="btn" onclick="showHelp()" style="padding:0.3rem 0.6rem;font-size:0.6rem;">HELP</button>
+      <button class="btn" onclick="showInventory()" style="padding:0.3rem 0.6rem;font-size:0.6rem;">INV</button>
+    </div>
+  </div>
+
+  <!-- Main 3-col -->
+  <div id="main">
+
+    <!-- Left Panel -->
+    <div id="left-panel">
+      <div>
+        <div class="pnl-title">Location</div>
+        <div class="loc-name" id="loc-name">Bleakwood Detective Agency</div>
+        <div class="anomaly-tag" id="loc-anomaly">Paperwork files itself.</div>
+      </div>
+      <div>
+        <div class="pnl-title">Who's Here</div>
+        <div class="npc-name" id="npc-name">Dolores</div>
+        <div class="npc-role" id="npc-role">Your secretary</div>
+      </div>
+      <div class="pnl-grow">
+        <div class="pnl-title">Travel To</div>
+        <div id="exits"></div>
+      </div>
+    </div>
+
+    <!-- Narrative -->
+    <div id="narrative">
+      <div id="scene-wrap">
+        <canvas id="scene-canvas"></canvas>
+      </div>
+      <div id="narrative-text"></div>
+    </div>
+
+    <!-- Right Panel -->
+    <div id="right-panel">
+      <div class="pnl-grow">
+        <div class="pnl-title">Case Notes</div>
+        <div id="clues-list">
+          <div class="empty-hint">No clues yet.</div>
+        </div>
+        <div class="meter-wrap" id="meter-wrap" style="display:none">
+          <div class="meter-label">Evidence: <span id="meter-pct">0%</span></div>
+          <div class="meter-bar"><div class="meter-fill" id="meter-fill" style="width:0"></div></div>
+        </div>
+      </div>
+      <div>
+        <div class="pnl-title">Inventory</div>
+        <div id="inv-list">
+          <div class="inv-chip">Lucky fedora</div>
+          <div class="inv-chip">Battered notebook</div>
+          <div class="inv-chip">Half-empty flask</div>
+        </div>
+      </div>
+      <div>
+        <div class="pnl-title">Visited</div>
+        <div id="visited-list"></div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+
+  <!-- Input Bar -->
+  <div id="input-bar">
+    <div class="prompt-glyph">&gt;</div>
+    <input id="cmd" type="text" autocomplete="off" spellcheck="false"
+           placeholder="What do you do? (look, talk, examine, go to…)">
+    <button class="btn btn-primary" id="send-btn" onclick="handleCommand()">SEND</button>
+  </div>
+
+</div><!-- /game -->
+
+<!-- Overlay -->
+<div id="overlay">
+  <div class="ov-title" id="ov-title"></div>
+  <div class="ov-text" id="ov-text"></div>
+  <button class="btn btn-primary" onclick="closeOverlay()">Continue</button>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   GAME DATA
+════════════════════════════════════════════════════════════ */
+
+const LOCS = {
+  office: {
+    name: 'Bleakwood Detective Agency',
+    district: 'The Precinct, 3rd Floor',
+    anomaly: 'Paperwork files itself. The coffee brews preemptively.',
+    npc:  { name:'Dolores Kwan', role:'Your secretary — has seen everything, unimpressed by all of it' },
+    exits: ['warehouse','docks','financial','chinatown'],
+    clueId: 'predated_report',
+    clueName: 'Pre-dated Police Report',
+    clueHint: 'A report filed for tomorrow, naming Dr. Voss as the perpetrator of a crime not yet committed',
+  },
+  warehouse: {
+    name: 'The Warehouse District',
+    district: 'East Perdition — Industrial Quarter',
+    anomaly: 'Gravity runs sideways. Everything falls toward the east wall.',
+    npc:  { name:'Big Tony Maranzetti', role:'Crime boss who now runs his empire from the east wall' },
+    exits: ['office','docks','uptown'],
+    clueId: 'extraction_receipt',
+    clueName: 'City Hall Extraction Receipt',
+    clueHint: '"Gravitational Constant, Lot 7B — Extracted per order of the Mayor\'s Office."',
+  },
+  docks: {
+    name: 'Perdition Docklands',
+    district: 'The Waterfront',
+    anomaly: 'Time hiccups here. Moments stutter and repeat.',
+    npc:  { name:'Captain Mercy Finn', role:'Harbourmaster; has been delivering the same bad news for four months' },
+    exits: ['office','warehouse','underground'],
+    clueId: 'tomorrows_paper',
+    clueName: "Tomorrow's Newspaper",
+    clueHint: 'Headline: "Physicist Dr. Voss Vanishes — Mayor Denies Any Knowledge"',
+  },
+  financial: {
+    name: 'The Financial District',
+    district: 'Uppertown Trading Quarter',
+    anomaly: 'Cause and effect are reversed. Consequences arrive first.',
+    npc:  { name:'Reginald Q. Merriweather III', role:'Banker who already knows what you\'re about to say' },
+    exits: ['office','chinatown','cityhall'],
+    clueId: 'signed_contract',
+    clueName: 'Pre-signed Contract',
+    clueHint: 'An agreement between Mayor Cross and Dr. Voss, selling "All Extracted Physical Laws." Signed before it was written.',
+  },
+  chinatown: {
+    name: 'The Jade Quarter',
+    district: 'Old Chinatown',
+    anomaly: 'Colors have physical mass. Red is heavy. Blue floats.',
+    npc:  { name:'Madame Chen', role:'Antiquarian who deals in shades by the kilogram' },
+    exits: ['office','financial','uptown'],
+    clueId: 'photograph',
+    clueName: 'Laboratory Photograph',
+    clueHint: 'Mayor Cross and Dr. Voss at the extraction machine, surrounded by cylinders labeled GRAVITY, TIME, CAUSALITY.',
+  },
+  uptown: {
+    name: 'Uptown Heights',
+    district: 'The Wealthy Quartile',
+    anomaly: 'Shadows are solid. You can trip over a lamppost\'s shadow.',
+    npc:  { name:'"Shadow" Sam Delacroix', role:'Information broker; keeps his detached shadow in a briefcase' },
+    exits: ['warehouse','chinatown','underground'],
+    clueId: 'lab_blueprint',
+    clueName: 'Machine Blueprints',
+    clueHint: 'Plans for the "Voss Physical Law Extraction Engine," built beneath City Hall. Mayor\'s permit signature on every page.',
+  },
+  underground: {
+    name: 'Club Paradox',
+    district: 'The Underground',
+    anomaly: 'Sound is visible. Music leaves colored trails in the air.',
+    npc:  { name:'Dizzy LaRue', role:'Jazz musician who paints masterpieces with his trumpet' },
+    exits: ['docks','uptown','cityhall'],
+    clueId: 'wax_confession',
+    clueName: "Dr. Voss's Confession",
+    clueHint: '"The Mayor forced me to build it. The laws are in the vault under City Hall. Return them before they\'re gone forever." — Dr. E. Voss',
+  },
+  cityhall: {
+    name: 'City Hall',
+    district: 'The Civic Center',
+    anomaly: 'All anomalies converge here. Physics gave up entirely.',
+    npc:  { name:'Mayor Harlan Cross', role:'The man who stole the laws of physics — and is running out of excuses' },
+    exits: ['financial','underground'],
+    clueId: null,
+    clueName: null,
+    clueHint: null,
+    isEndgame: true,
+  },
+};
+
+const LOC_LABELS = {
+  office:'Detective Agency', warehouse:'Warehouse District',
+  docks:'The Docks', financial:'Financial District',
+  chinatown:'Jade Quarter', uptown:'Uptown Heights',
+  underground:'Club Paradox', cityhall:'City Hall',
+};
+
+/* ════════════════════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════════════════════ */
+
+const S = {
+  apiKey: '',
+  loc: 'office',
+  inventory: ['lucky fedora','battered notebook','half-empty flask'],
+  clues: [],           // clue IDs collected
+  visited: new Set(['office']),
+  loading: false,
+  turn: 0,
+  cacheHits: 0,
+  gameWon: false,
+};
+
+/* ════════════════════════════════════════════════════════════
+   SYSTEM PROMPT  (cached — kept stable between calls)
+════════════════════════════════════════════════════════════ */
+
+const SYSTEM_PROMPT = `You are the narrator of THE ANOMALY, a noir text adventure game set in the City of Perdition — a rain-slicked metropolis where someone has been literally stealing the laws of physics, one neighborhood at a time. Your writing is first-person, present-tense, from the perspective of DETECTIVE MILES DRAKE.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+THE DETECTIVE
+━━━━━━━━━━━━━━━━━━━━━━━━━
+MILES DRAKE: 47. Private investigator. Seen too much to be surprised — until now. Speaks in terse, clipped sentences. Has a gift for understatement that borders on a character flaw. Wears a lucky fedora that has survived three bullets, two fires, and one anomaly involving inverted gravity. Drinks coffee black and carries a hip flask for emergencies. His apartment is above a dry cleaner's that has recently begun pressing garments before they're brought in. He notices details nobody else bothers to notice, and he's tired of being the only one who does.
+
+Drake's internal voice: laconic, wry, perpetually slightly disgusted by everything in a way that does not prevent him from caring. He uses concrete, unexpected similes. He underplays the extraordinary. He finds the physics anomalies personally offensive — not because they're impossible, but because they're inconvenient and nobody is apologizing for them.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+THE CITY OF PERDITION
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Perdition used to work. Nine months ago, localized physics anomalies began appearing district by district. Nobody in authority has explained why. The newspapers call them "atmospheric irregularities." The residents have adapted with the mixture of ingenuity, denial, and mild existential dread that characterizes the human species at its finest.
+
+The cause: DR. ELEANOR VOSS, theoretical physicist, built a Physical Law Extraction Engine in the basement of City Hall, commissioned by MAYOR HARLAN CROSS. The machine identifies, isolates, and physically removes fundamental laws of physics from localized areas — selling them to parties unknown. The machine is still running. The anomalies grow worse each week. Dr. Voss has disappeared.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+DISTRICTS & ANOMALIES
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BLEAKWOOD DETECTIVE AGENCY (The Precinct):
+The administrative anomaly: paperwork achieves mild sentience. Documents file themselves — sometimes in the wrong place, which they defend with citations. Memos edit themselves to say what they actually mean. The coffee machine brews before Drake wants it, anticipating mood. None of this is regarded as remarkable. Dolores finds it marginally less irritating than human filing.
+
+THE WAREHOUSE DISTRICT:
+Gravity redirected 90 degrees toward magnetic east. Objects, people, water, structural debris — all fall toward the east wall of every building. Workers wear magnetized boots on the floor, treating the east wall as ground. Horizontal forklifts. Rain falls sideways and pools against warehouses. The district safety inspector wrote seventeen memos requesting clarification on which direction is now "down" and has not received a reply.
+
+THE DOCKLANDS:
+Local causality stutters in loops of 3 to 11 seconds. A seagull lands, doesn't land, lands again — before it finishes landing the first time. Conversations must be shouted across the temporal gaps. Ships' fog-horns sound, unsound, sound. The harbor workers have developed an elaborate system of gestures to communicate across the loops. Captain Finn has been delivering the same bad news for four months, and has achieved a Zen-like acceptance of it.
+
+THE FINANCIAL DISTRICT:
+Cause and effect have reversed polarity. Consequences precede causes. Windows shatter before rocks hit them. Investors receive profits before they invest. Financial statements exist before the transactions they document. The district's bankers adapted magnificently — they read tomorrow's news and trade accordingly. The currency has value because it will have had value. It took three weeks before anyone realized this was an anomaly rather than unusually good forecasting.
+
+THE JADE QUARTER:
+Visible light has acquired mass proportional to wavelength. Red objects are crushingly dense. Blue things float gently. Yellow is a health hazard. The sky is white — blue has settled at sea level, red has concentrated near the ground. Merchants weigh paint chips and sell shades by the kilogram. The food-coloring market has become the most volatile commodity exchange in Perdition. Madame Chen was selling rare colors before it became fashionable.
+
+UPTOWN HEIGHTS:
+Shadows have achieved physical solidity. You can stub your toe on the shadow of a lamppost. Shadows stack. They can be collected, bought, sold, and stolen. The wealthy maintain shadow collections from exotic light sources. Burglars have pivoted to shadow-theft. Morning shadow-clearing crews are on overtime. "Shadow" Sam had his own shadow surgically detached before this became fashionable — he keeps it in a briefcase and shows it to people during negotiations.
+
+CLUB PARADOX (The Underground):
+Acoustic waves refract visible light, producing persistent colored trails. Conversations leave silver mist. Arguments leave smoke. The jazz band doesn't play music so much as paint it — their compositions exist simultaneously as sound and visual art. Dizzy LaRue's trumpet solos look like late Kandinsky. The club doesn't charge a cover. Good nights are worth a fortune on the shadow market.
+
+CITY HALL:
+The source. The machine runs in the basement. All anomalies converge here — gravity unreliable, time approximate, causality on a rotating schedule. The architecture looks wrong in ways that are hard to articulate. The Mayor's office is on the third floor, which is sometimes the second. Staff have stopped using the elevators.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+THE EIGHT NPCS
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DOLORES KWAN (office secretary):
+Eleven years with the agency. Has survived three cases ending in gunfire, two in structural collapse, one in a philosophical dispute about whether the client existed. Delivers all information and all judgments in the tone of someone completing a dull tax return. Gives excellent advice while appearing to give none. Currently managing a turf war with a memo that keeps rewriting her job description. Voice: dry, flat, omniscient, zero emotional investment.
+
+BIG TONY MARANZETTI (Warehouse District):
+6'4", 280 lbs, operates his entire criminal enterprise from the east wall of his warehouse, which is now functionally the floor. Has adapted to sideways gravity by not acknowledging it and paying people to solve it. His desk is bolted to the east wall. The fish tank is horizontal. Meetings happen standing on the wall. He is a practical man who has noticed something is wrong and wants it fixed because it is bad for business. Voice: blunt, physical, surprisingly reasonable once you get past the menace.
+
+CAPTAIN MERCY FINN (Docklands):
+Harbor master trapped in a 45-minute loop for four months. Has delivered the same bad news — the SS Perseverance is overdue, cargo unknown, insurance questionable — so many times she has achieved professional transcendence. Continues working because what else would she do. Knows everything about the anomaly because she's had four months to study it from the inside. Will repeat herself — or almost repeat herself, with small variations that she barely notices. Voice: tired, resigned, precise, professionally fatalistic.
+
+REGINALD Q. MERRIWEATHER III (Financial District):
+Managing director of Merriweather & Associates. Smug in the specific way of someone who is always right because he knows what's coming. Answers questions before they're asked. Finishes other people's sentences before the other people start them. Has become very wealthy from reversed causality. Is not entirely pleased that his foreknowledge extends to conversations with detectives. Was an early investor in the Mayor's arrangement. Voice: supercilious, precognitive, defensive when cornered.
+
+MADAME CHEN (Jade Quarter):
+Proprietor of the Spectrum Emporium. Elegant, precise, commercially pragmatic about the anomaly in the way of someone who has always treated the physical world as a marketplace. Handles colors the way others handle produce — checking weight, provenance, quality. Has kept meticulous records of the anomaly's progression. Will help if you're respectful and show genuine interest. Has a professional opinion about everyone, delivered as observations about their dominant color. Voice: precise, elegant, faintly amused, commercially astute.
+
+"SHADOW" SAM DELACROIX (Uptown Heights):
+Information broker. The briefcase shadow is both a practical demonstration and a negotiating tactic. Not actually dangerous, probably. Has made himself indispensable to every faction in Perdition, which is why he's still alive and still free. Gives information for money, favors, or sufficiently interesting stories. Knows about the Mayor's arrangement because he made it his business to know. Voice: mercenary, theatrical, street-smart, unexpectedly forthcoming once the price is agreed.
+
+DIZZY LARUE (Club Paradox):
+Jazz musician. His trumpet solos sell as paintings. Is philosophical about the anomaly — thinks music was always visual, we just couldn't see it before. Has been at Club Paradox through everything and knows everyone who moves through the underground. Gives information in jazz metaphors that are more precise than they first appear if you listen carefully. Voice: gentle, oblique, musical in rhythm, surprisingly clear on the important things.
+
+MAYOR HARLAN CROSS (City Hall):
+Began as a city alderman with a talent for development deals. Met Dr. Voss at a conference on urban infrastructure and saw a business opportunity. Commissioned the machine because if you can extract physics, you can sell physics, and if you can sell physics, you can be very rich. Did not fully understand what "permanent anomalies" meant. Is now trapped — can't admit what he's done, can't stop the machine alone, running out of excuses. Voice: political, smooth, defensive, increasingly desperate as evidence accumulates.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+THE MYSTERY
+━━━━━━━━━━━━━━━━━━━━━━━━━
+There are six clues hidden across the city:
+1. Warehouse District: A City Hall receipt for "Gravitational Constant, Lot 7B"
+2. The Docks: A newspaper dated tomorrow announcing Dr. Voss's "retirement"
+3. Financial District: A pre-signed contract between the Mayor and Dr. Voss
+4. Jade Quarter: A photograph of the Mayor and Dr. Voss at the machine
+5. Uptown Heights: Blueprints of the extraction engine, Mayor's signature on permits
+6. Club Paradox: A wax cylinder recording of Dr. Voss's confession
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+TONE & STYLE
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Golden-age noir rhythm: Chandler, Hammett, early Macdonald. Short declarative sentences. Vivid, unexpected similes. The protagonist is laconic, observant, and faintly disgusted by everything, which does not prevent him from caring.
+
+The absurdist comedy comes from treating the impossible with absolute normalcy. Workers in the Warehouse District don't question sideways gravity — they've filed the appropriate union complaints and moved on. The comedy lives in the gap between the enormity of the anomaly and the mundane human response to it. Keep this deadpan. Never wink at the audience.
+
+Every description should contain at least one concrete sensory detail specific to that district's anomaly. Don't describe a broken window in the Financial District without noting it broke before the rock arrived.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+RESPONSE FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━
+- 2–3 short paragraphs of vivid noir prose, 80–160 words total. Be concise — punchy Chandler-style sentences, not long blocks.
+- Weave the physics anomaly naturally into every description
+- Voice NPCs distinctly, shaped by their anomaly and personality
+- If the player discovers the location's clue through genuine investigation (examining, searching, talking in depth), end your response with this exact line: [CLUE FOUND: clueName]
+  Replace clueName with the actual clue name. Only use this once per location.
+- If a player picks up an item, append: [ITEM: itemName]
+- At City Hall with 5+ clues in inventory: write the full confrontation with the Mayor and the resolution — Drake presents the evidence, Cross breaks, the machine is shut down, the laws of physics begin returning to each district. Make it satisfying.
+- At City Hall with fewer than 5 clues: Cross is evasive, nothing conclusive happens, Drake feels he doesn't have enough yet.
+- If the player does something impossible or absurd, have Drake attempt it with deadpan commitment and describe the results.
+- Never break character. Never mention being an AI. Never explain the game fiction.`;
+
+/* ════════════════════════════════════════════════════════════
+   CLAUDE STREAMING API
+════════════════════════════════════════════════════════════ */
+
+async function* streamClaude(userMsg) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': S.apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-6',
+      max_tokens: 400,
+      stream: true,
+      system: [
+        {
+          type: 'text',
+          text: SYSTEM_PROMPT,
+          cache_control: { type: 'ephemeral' }   // Cache large stable system prompt
+        }
+      ],
+      messages: [{ role: 'user', content: userMsg }],
+    }),
+  });
+
+  if (!res.ok) {
+    let msg = `API error ${res.status}`;
+    try { const d = await res.json(); msg = d.error?.message || msg; } catch (_) {}
+    throw new Error(msg);
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const raw = line.slice(6).trim();
+      if (!raw || raw === '[DONE]') continue;
+      try {
+        const ev = JSON.parse(raw);
+        // Track cache hits from message_start
+        if (ev.type === 'message_start') {
+          const u = ev.message?.usage;
+          if (u?.cache_read_input_tokens > 0) {
+            S.cacheHits++;
+            document.getElementById('cache-badge').classList.add('visible');
+          }
+        }
+        if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+          yield ev.delta.text;
+        }
+      } catch (_) {}
+    }
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   SAVE MANAGER  — localStorage persistence
+════════════════════════════════════════════════════════════ */
+const SaveManager = (() => {
+  const KEY = 'the-anomaly-v1';
+
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({
+        loc:       S.loc,
+        inventory: S.inventory,
+        clues:     S.clues,
+        visited:   [...S.visited],
+        turn:      S.turn,
+        gameWon:   S.gameWon,
+      }));
+    } catch (_) {}
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return false;
+      const d = JSON.parse(raw);
+      S.loc       = d.loc       || 'office';
+      S.inventory = d.inventory || ['lucky fedora','battered notebook','half-empty flask'];
+      S.clues     = d.clues     || [];
+      S.visited   = new Set(d.visited || ['office']);
+      S.turn      = d.turn      || 0;
+      S.gameWon   = d.gameWon   || false;
+      return true;
+    } catch (_) { return false; }
+  }
+
+  function meta() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return null;
+      const d = JSON.parse(raw);
+      return { clues: (d.clues || []).length, turn: d.turn || 0, loc: d.loc };
+    } catch (_) { return null; }
+  }
+
+  function hasSave() { return !!localStorage.getItem(KEY); }
+  function clear()   { localStorage.removeItem(KEY); }
+
+  return { save, load, hasSave, clear, meta };
+})();
+
+/* ════════════════════════════════════════════════════════════
+   GAME LOGIC
+════════════════════════════════════════════════════════════ */
+
+function buildUserMsg(action) {
+  const loc = LOCS[S.loc];
+  const clueNames = S.clues.map(id => {
+    for (const l of Object.values(LOCS)) if (l.clueId === id) return l.clueName;
+    return id;
+  });
+
+  let extra = '';
+  if (S.loc === 'cityhall') {
+    extra = S.clues.length >= 5
+      ? '\n\nCRITICAL: The player has sufficient evidence. This is the endgame confrontation. Write the full resolution — Drake presents each clue, the Mayor breaks, the machine is shut down, the laws of physics begin returning to each district. Be satisfying and conclusive.'
+      : `\n\nThe player is at City Hall but only has ${S.clues.length} of the 5+ clues needed. Have Mayor Cross be evasive and slippery. Drake senses he doesn't have enough yet.`;
+  }
+
+  return `CURRENT LOCATION: ${loc.name} (${loc.district})
+PHYSICS ANOMALY: ${loc.anomaly}
+NPC PRESENT: ${loc.npc.name} — ${loc.npc.role}
+PLAYER INVENTORY: ${S.inventory.join(', ')}
+CLUES COLLECTED (${S.clues.length}): ${clueNames.length ? clueNames.join(', ') : 'none yet'}
+DISTRICTS VISITED: ${[...S.visited].map(l => LOC_LABELS[l]).join(', ')}
+TURN: ${S.turn}
+
+PLAYER ACTION: ${action}${extra}
+
+Respond as the noir narrator.`;
+}
+
+function extractClueAndItem(rawText) {
+  let text = rawText;
+  let foundClue = false, foundItem = null;
+
+  // Check for clue marker
+  const clueRx = /\[CLUE FOUND:\s*(.+?)\]/i;
+  const clueMatch = text.match(clueRx);
+  if (clueMatch) {
+    const loc = LOCS[S.loc];
+    if (loc.clueId && !S.clues.includes(loc.clueId)) {
+      S.clues.push(loc.clueId);
+      foundClue = true;
+      addClueToUI(loc.clueId);
+    }
+    text = text.replace(clueRx, '').trim();
+  }
+
+  // Check for item marker
+  const itemRx = /\[ITEM:\s*(.+?)\]/i;
+  const itemMatch = text.match(itemRx);
+  if (itemMatch) {
+    foundItem = itemMatch[1].trim();
+    if (!S.inventory.includes(foundItem)) {
+      S.inventory.push(foundItem);
+      refreshInv();
+    }
+    text = text.replace(itemRx, '').trim();
+  }
+
+  return { text, foundClue, foundItem };
+}
+
+// Parse travel target from command text
+function parseTravelTarget(cmd) {
+  const c = cmd.toLowerCase();
+  const map = [
+    ['warehouse',   ['warehouse','east side','industrial','eastern']],
+    ['docks',       ['dock','harbor','harbour','port','waterfront','wharf','water']],
+    ['financial',   ['financial','bank','trading','stocks','exchange','upper']],
+    ['chinatown',   ['jade','chinatown','china','quarter','chen']],
+    ['uptown',      ['uptown','heights','wealthy','rich','sam']],
+    ['underground', ['underground','club','paradox','jazz','dizzy']],
+    ['cityhall',    ['city hall','cityhall','mayor','civic','hall']],
+    ['office',      ['office','agency','precinct','home','back','desk']],
+  ];
+  for (const [id, kws] of map) {
+    if (kws.some(k => c.includes(k))) return id;
+  }
+  return null;
+}
+
+function tryTravel(cmd) {
+  const target = parseTravelTarget(cmd);
+  if (!target || target === S.loc) return false;
+
+  const exits = LOCS[S.loc].exits;
+  if (!exits.includes(target)) {
+    pushMessage(cmd, `The ${LOC_LABELS[target]} isn't adjacent. Try a different route.`, true);
+    return true;
+  }
+
+  if (target === 'cityhall' && S.clues.length < 5) {
+    pushMessage(cmd, `Something keeps me from heading to City Hall. I don't have enough on the Mayor yet. ${S.clues.length} clue${S.clues.length===1?'':'s'} — I need at least five.`, true);
+    return true;
+  }
+
+  doTravel(target);
+  return true;
+}
+
+function doTravel(locId) {
+  S.loc = locId;
+  S.visited.add(locId);
+  SaveManager.save();
+  Sounds.playTravel();
+  if (locId === 'cityhall') setTimeout(() => Sounds.playCityhall(), 400);
+  refreshLocUI();
+  const label = LOCS[locId].name;
+  runAction(
+    `travel to ${label}`,
+    `Describe Drake's arrival at ${label}. Establish the atmosphere immediately, put the physics anomaly front-and-center in the opening image, and ground us in the sensory experience of being here. Set the scene for what's to come.`
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   UI
+════════════════════════════════════════════════════════════ */
+
+function refreshLocUI() {
+  const loc = LOCS[S.loc];
+  SceneRenderer.draw(S.loc);
+  document.getElementById('hdr-loc').textContent = loc.district;
+  document.getElementById('loc-name').textContent = loc.name;
+  document.getElementById('loc-anomaly').textContent = loc.anomaly;
+  document.getElementById('npc-name').textContent = loc.npc.name;
+  document.getElementById('npc-role').textContent = loc.npc.role;
+
+  // Exits
+  const exDiv = document.getElementById('exits');
+  exDiv.innerHTML = '';
+  for (const exitId of LOCS[S.loc].exits) {
+    const locked = exitId === 'cityhall' && S.clues.length < 5;
+    const b = document.createElement('button');
+    b.className = 'exit-btn' + (locked ? ' locked' : '');
+    b.textContent = (locked ? '🔒 ' : '') + LOC_LABELS[exitId];
+    if (!locked) b.onclick = () => doTravel(exitId);
+    exDiv.appendChild(b);
+  }
+
+  // Visited
+  const vDiv = document.getElementById('visited-list');
+  vDiv.innerHTML = '';
+  for (const id of S.visited) {
+    const d = document.createElement('div');
+    d.className = 'visited-item' + (id === S.loc ? ' cur' : '');
+    d.textContent = (id === S.loc ? '● ' : '○ ') + LOC_LABELS[id];
+    vDiv.appendChild(d);
+  }
+}
+
+function addClueToUI(clueId) {
+  const cList = document.getElementById('clues-list');
+  // Remove placeholder
+  cList.querySelector('.empty-hint')?.remove();
+
+  let name = clueId, hint = '';
+  for (const l of Object.values(LOCS)) {
+    if (l.clueId === clueId) { name = l.clueName; hint = l.clueHint || ''; break; }
+  }
+
+  const d = document.createElement('div');
+  d.className = 'clue-chip';
+  d.title = hint;
+  d.innerHTML = `<span class="dot">●</span>${name}`;
+  cList.appendChild(d);
+
+  // Meter
+  const pct = Math.min(100, Math.round((S.clues.length / 6) * 100));
+  document.getElementById('meter-wrap').style.display = 'block';
+  document.getElementById('meter-pct').textContent = pct + '%';
+  document.getElementById('meter-fill').style.width = pct + '%';
+
+  // Unlock City Hall if enough clues
+  if (S.clues.length >= 5) refreshLocUI();
+
+  // Flash new clue
+  d.style.background = 'rgba(194,59,34,0.25)';
+  setTimeout(() => d.style.background = '', 800);
+}
+
+function refreshInv() {
+  const iDiv = document.getElementById('inv-list');
+  iDiv.innerHTML = '';
+  S.inventory.forEach(item => {
+    const d = document.createElement('div');
+    d.className = 'inv-chip';
+    d.textContent = item;
+    iDiv.appendChild(d);
+  });
+}
+
+// Push a simple (non-streaming) message
+function pushMessage(action, text, isError = false) {
+  const wrap = document.getElementById('narrative-text');
+  const entry = document.createElement('div');
+  entry.className = 'n-entry';
+  entry.innerHTML = `
+    <div class="n-action">${action}</div>
+    <div class="n-text${isError ? ' error' : ''}">${text}</div>
+  `;
+  wrap.appendChild(entry);
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+// Create a streaming entry (returns handles to fill it in)
+function beginStreamEntry(action) {
+  const wrap = document.getElementById('narrative-text');
+  const entry = document.createElement('div');
+  entry.className = 'n-entry';
+
+  const actDiv = document.createElement('div');
+  actDiv.className = 'n-action';
+  actDiv.textContent = action;
+
+  const txtDiv = document.createElement('div');
+  txtDiv.className = 'n-text';
+
+  const loadDiv = document.createElement('div');
+  loadDiv.className = 'dots';
+  loadDiv.innerHTML = '<span></span><span></span><span></span>';
+
+  const cur = document.createElement('span');
+  cur.className = 'cursor';
+
+  entry.appendChild(actDiv);
+  entry.appendChild(txtDiv);
+  txtDiv.appendChild(loadDiv);
+  wrap.appendChild(entry);
+  wrap.scrollTop = wrap.scrollHeight;
+
+  return { wrap, txtDiv, loadDiv, cur };
+}
+
+function setLoading(v) {
+  S.loading = v;
+  document.getElementById('cmd').disabled = v;
+  const btn = document.getElementById('send-btn');
+  btn.disabled = v;
+  btn.textContent = v ? '…' : 'SEND';
+}
+
+function showHelp() {
+  showOverlay('HOW TO PLAY',
+`COMMANDS — type anything natural, or use these:
+
+  look / look around    — examine surroundings
+  talk / talk to [name] — speak with the NPC here
+  examine [thing]       — inspect something closely
+  search for clues      — investigate for evidence
+  take / pick up [item] — collect an object
+  go to [location]      — travel to an adjacent district
+  inventory             — check your pockets
+  clues / notes         — review case notes
+
+DISTRICTS (8 total):
+  Detective Agency → Warehouse, Docks, Financial, Chinatown
+  Warehouse        → Agency, Docks, Uptown
+  Docks            → Agency, Warehouse, Underground
+  Financial        → Agency, Chinatown, City Hall 🔒
+  Chinatown        → Agency, Financial, Uptown
+  Uptown           → Warehouse, Chinatown, Underground
+  Underground      → Docks, Uptown, City Hall 🔒
+  City Hall        → unlocks with 5 clues (endgame)
+
+Collect 5 clues to unlock City Hall and confront Mayor Cross.
+Hover over clues in the right panel for details.`);
+}
+
+function showInventory() {
+  showOverlay('INVENTORY', S.inventory.join('\n'));
+}
+
+function showOverlay(title, text) {
+  document.getElementById('ov-title').textContent = title;
+  document.getElementById('ov-text').textContent = text;
+  document.getElementById('overlay').classList.add('active');
+}
+
+function closeOverlay() {
+  document.getElementById('overlay').classList.remove('active');
+  document.getElementById('cmd').focus();
+}
+
+/* ════════════════════════════════════════════════════════════
+   CORE ACTION RUNNER
+════════════════════════════════════════════════════════════ */
+
+async function runAction(displayAction, apiAction) {
+  if (S.loading) return;
+  setLoading(true);
+  S.turn++;
+
+  const { wrap, txtDiv, loadDiv, cur } = beginStreamEntry(displayAction);
+  let full = '';
+  let started = false;
+
+  try {
+    for await (const chunk of streamClaude(buildUserMsg(apiAction || displayAction))) {
+      if (!started) {
+        loadDiv.remove();
+        txtDiv.appendChild(cur);
+        started = true;
+      }
+      cur.remove();
+      full += chunk;
+      // Show clean text (strip markers) while streaming
+      txtDiv.textContent = full.replace(/\[CLUE FOUND:.*?\]/gi,'').replace(/\[ITEM:.*?\]/gi,'').trim();
+      txtDiv.appendChild(cur);
+      wrap.scrollTop = wrap.scrollHeight;
+    }
+
+    cur.remove();
+    if (!started) loadDiv.remove();
+
+    // Parse final text for markers
+    const { text, foundClue } = extractClueAndItem(full);
+    txtDiv.textContent = text;
+
+    if (foundClue) {
+      Sounds.playClue();
+      const badge = document.createElement('div');
+      badge.className = 'n-clue-found';
+      badge.textContent = '⬥ Evidence secured.';
+      txtDiv.parentElement.appendChild(badge);
+    }
+
+    // Check win condition
+    if (S.loc === 'cityhall' && S.clues.length >= 5 && !S.gameWon) {
+      S.gameWon = true;
+      setTimeout(() => showOverlay('CASE CLOSED',
+`The Voss Extraction Engine shuddered to a halt at 11:47 PM.
+
+Over the following days, the laws of physics trickled back to each district like tenants returning after a building dispute — cautiously, checking corners, not quite trusting the place yet.
+
+Gravity went vertical again in the Warehouse District. Tony Maranzetti had to completely reorganize his filing system.
+
+Time stopped stuttering at the Docks. Captain Finn delivered a piece of news that hadn't already happened. She cried a little, then denied it.
+
+Colors lost their mass in the Jade Quarter. The color market crashed overnight. Madame Chen had anticipated this and diversified into shadows.
+
+Mayor Cross was tried in a court that briefly forgot which direction time ran, which made the proceedings entertaining for everyone except the Mayor.
+
+Dr. Voss was cleared of all charges. She spent the rest of her career writing a paper titled "Why I Will Not Be Doing That Again" and giving lectures about it.
+
+I collected my fee. Dolores had already filed the receipt.
+
+The city of Perdition went back to being merely corrupt, which was, all things considered, a relief.`), 2500);
+    }
+
+  } catch (err) {
+    if (!started) loadDiv.remove();
+    cur.remove();
+
+    let msg = err.message || 'Something went wrong.';
+    if (msg.includes('401')) msg = 'Invalid API key. Please refresh the page.';
+    else if (msg.includes('429')) msg = 'Rate limited. Wait a moment and try again.';
+    else if (msg.includes('529') || msg.includes('overload')) msg = 'API overloaded. Try again shortly.';
+    else if (!navigator.onLine) msg = 'No internet connection.';
+
+    const errEl = document.createElement('div');
+    errEl.className = 'n-text error';
+    errEl.textContent = '⚠ ' + msg;
+    txtDiv.parentElement.appendChild(errEl);
+  } finally {
+    setLoading(false);
+    SaveManager.save();
+    document.getElementById('cmd').focus();
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   COMMAND HANDLER
+════════════════════════════════════════════════════════════ */
+
+async function handleCommand() {
+  const el = document.getElementById('cmd');
+  const raw = el.value.trim();
+  if (!raw || S.loading) return;
+  el.value = '';
+
+  const lower = raw.toLowerCase();
+
+  // Local commands (no API call)
+  if (lower === 'new game' || lower === 'restart' || lower === 'reset') {
+    if (confirm('Start a fresh case? This erases your saved progress.')) {
+      SaveManager.clear(); location.reload();
+    }
+    return;
+  }
+  if (lower === 'inventory' || lower === 'inv' || lower === 'i') {
+    showInventory(); return;
+  }
+  if (lower === 'clues' || lower === 'notes' || lower === 'case notes') {
+    const names = S.clues.map(id => {
+      for (const l of Object.values(LOCS)) if (l.clueId === id) return `• ${l.clueName}: ${l.clueHint}`;
+      return '• ' + id;
+    });
+    showOverlay('CASE NOTES', names.length ? names.join('\n\n') : 'No clues collected yet.'); return;
+  }
+  if (lower === 'help' || lower === '?') { showHelp(); return; }
+
+  // Travel commands
+  const travelTriggers = ['go','travel','walk','head','move','take me','drive'];
+  const isTravel = travelTriggers.some(t => lower.startsWith(t)) || lower.startsWith('to ');
+  if (isTravel && tryTravel(raw)) return;
+
+  // Direct location name as command
+  const directTarget = parseTravelTarget(raw);
+  if (directTarget && directTarget !== S.loc) {
+    if (tryTravel('go to ' + raw)) return;
+  }
+
+  // Everything else goes to Claude
+  await runAction(raw, raw);
+}
+
+function quickCmd(cmd) {
+  document.getElementById('cmd').value = cmd;
+  handleCommand();
+}
+
+/* ════════════════════════════════════════════════════════════
+   RAIN ANIMATION
+════════════════════════════════════════════════════════════ */
+
+function initRain() {
+  const canvas = document.getElementById('rain');
+  const ctx = canvas.getContext('2d');
+  const drops = [];
+
+  function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  for (let i = 0; i < 160; i++) {
+    drops.push({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      len: Math.random() * 26 + 10,
+      speed: Math.random() * 3 + 1.8,
+      alpha: Math.random() * 0.5 + 0.15,
+    });
+  }
+
+  (function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drops.forEach(d => {
+      ctx.globalAlpha = d.alpha;
+      ctx.strokeStyle = '#c8a040';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x - d.len * 0.25, d.y + d.len);
+      ctx.stroke();
+      d.y += d.speed;
+      d.x -= d.speed * 0.2;
+      if (d.y > canvas.height + d.len) {
+        d.y = -d.len;
+        d.x = Math.random() * canvas.width;
+      }
+    });
+    requestAnimationFrame(animate);
+  })();
+}
+
+/* ════════════════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════════════════ */
+
+function startGame(resume = false) {
+  const keyEl = document.getElementById('api-key');
+  const key = keyEl.value.trim();
+
+  if (!key.startsWith('sk-')) {
+    keyEl.classList.add('error');
+    setTimeout(() => keyEl.classList.remove('error'), 1400);
+    return;
+  }
+
+  S.apiKey = key;
+
+  const restoring = resume && SaveManager.load();
+  if (!restoring) SaveManager.clear();
+
+  document.getElementById('api-screen').style.display = 'none';
+  document.getElementById('game').classList.add('active');
+  document.getElementById('rain').classList.add('in-game');
+  Music.start();
+
+  // Restore clue UI before refreshLocUI so City Hall unlock check is correct
+  if (restoring && S.clues.length > 0) {
+    const cList = document.getElementById('clues-list');
+    cList.innerHTML = '';
+    S.clues.forEach(id => {
+      let name = id, hint = '';
+      for (const l of Object.values(LOCS)) {
+        if (l.clueId === id) { name = l.clueName; hint = l.clueHint || ''; break; }
+      }
+      const d = document.createElement('div');
+      d.className = 'clue-chip';
+      d.title = hint;
+      d.innerHTML = `<span class="dot">●</span>${name}`;
+      cList.appendChild(d);
+    });
+    const pct = Math.min(100, Math.round((S.clues.length / 6) * 100));
+    document.getElementById('meter-wrap').style.display = 'block';
+    document.getElementById('meter-pct').textContent = pct + '%';
+    document.getElementById('meter-fill').style.width = pct + '%';
+  }
+
+  refreshLocUI();
+  refreshInv();
+
+  if (restoring) {
+    const c = S.clues.length;
+    pushMessage(
+      '› case file restored',
+      `${LOCS[S.loc].name}. Turn ${S.turn}. ${c} clue${c === 1 ? '' : 's'} in hand. The city is still broken.`
+    );
+    runAction(
+      'getting back up to speed',
+      `Drake has picked up the case again after a break. He's at ${LOCS[S.loc].name} (${LOCS[S.loc].district}). He has ${S.clues.length} clue${S.clues.length === 1 ? '' : 's'} collected so far. Write 2–3 terse noir sentences: Drake orienting himself, noting briefly where he is and what he's established. Don't recap everything — just Drake getting his bearings and settling back in. End on a line that gives a sense of momentum.`
+    );
+  } else {
+    runAction(
+      'begin investigation',
+      `Drake is in his office. It's a new case — the kind that starts with a phone call at 3 AM and ends somewhere you didn't expect. The city has been developing physics anomalies. Dolores has a file. The rain is doing something outside the window that rain probably shouldn't be doing. Write the opening scene: establish Drake's voice immediately, describe the office and the rain-slicked city visible through the window, show Dolores handing over the case file, and hint at the scale of the strangeness beyond. End on a line that makes the player want to move.`
+    );
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   SCENE RENDERER  — procedural pixel-art (320×80 panoramic, CSS scaled)
+════════════════════════════════════════════════════════════ */
+const SceneRenderer = (() => {
+  const NW = 320, NH = 80;
+  let cv, cx;
+
+  // Seeded PRNG so scenes are identical on every redraw
+  function rng(seed) {
+    let s = seed >>> 0;
+    return () => { s = (Math.imul(1664525, s) + 1013904223) >>> 0; return s / 0xffffffff; };
+  }
+
+  function init() {
+    cv = document.getElementById('scene-canvas');
+    cv.width = NW; cv.height = NH;
+    cx = cv.getContext('2d');
+  }
+
+  // ── primitives ──────────────────────────────────────────
+  function r(x,y,w,h,c) { cx.fillStyle=c; cx.fillRect(x,y,w,h); }
+  function a(al, fn) { cx.globalAlpha=al; fn(); cx.globalAlpha=1; }
+  function grad(x1,y1,x2,y2,stops) {
+    const g=cx.createLinearGradient(x1,y1,x2,y2);
+    stops.forEach(([t,c])=>g.addColorStop(t,c)); return g;
+  }
+  // "Pixelated" circle via rect spiral
+  function circle(ox,oy,rad,col,alpha_=1) {
+    a(alpha_, ()=>{
+      cx.fillStyle=col;
+      for(let dy=-rad;dy<=rad;dy++) for(let dx=-rad;dx<=rad;dx++)
+        if(dx*dx+dy*dy<=rad*rad) cx.fillRect(ox+dx,oy+dy,1,1);
+    });
+  }
+
+  // ── palettes ────────────────────────────────────────────
+  const C = {
+    void:'#05050f', night:'#08081a', panel:'#0c0c1a',
+    dblue:'#0d1526', mblue:'#162040', lblue:'#4a8ab8', vblue:'#6aaad8',
+    water:'#060e18', dwat:'#030a10',
+    wood:'#5a3810', dwood:'#3a2008', tan:'#8a6030',
+    stone:'#2e2e3e', lgrey:'#6a6a7a', mgrey:'#3a3a4a', dgrey:'#1e1e2a',
+    gold:'#d4a843', bgold:'#f0c060', amber:'#c07010', damb:'#7a4808',
+    red:'#c23b22', dred:'#6a1808', cream:'#d8c898', paper:'#c8b878',
+    cyan:'#38a8c8', purp:'#6a1a8a', dpurp:'#2a0840',
+    yell:'#d8c030', grn:'#2a6a2a',
+  };
+
+  // ── shared helpers ───────────────────────────────────────
+  function skyline(rr, yBase, buildings, wallCol, winCol, litP) {
+    buildings.forEach(([bx,bw,bh])=>{
+      const by=yBase-bh;
+      r(bx,by,bw,bh,wallCol);
+      for(let wy=by+4;wy<by+bh-3;wy+=6)
+        for(let wx=bx+3;wx<bx+bw-2;wx+=5)
+          if(rr()<litP) r(wx,wy,3,3,winCol);
+    });
+  }
+
+  function dropRain(rr,x0,y0,x1,y1,count,col) {
+    cx.strokeStyle=col; cx.lineWidth=0.5;
+    for(let i=0;i<count;i++){
+      const rx=x0+rr()*(x1-x0), ry=y0+rr()*(y1-y0);
+      a(0.3+rr()*0.4,()=>{ cx.beginPath(); cx.moveTo(rx,ry); cx.lineTo(rx-1,ry+5); cx.stroke(); });
+    }
+  }
+
+  // ── scenes ───────────────────────────────────────────────
+  const scenes = {
+
+    office() {
+      const rr=rng(42);
+      r(0,0,NW,NH,C.night);
+
+      // Wide night-city window — left third of frame
+      r(4,4,82,52,C.dblue); r(5,5,80,50,'#04040e');
+      // City in window
+      for(let bx=6,i=0;bx<84;bx+=10,i++){
+        const bh=14+rr()*22, by=5+50-bh;
+        r(bx,by,9,bh,'#020204');
+        for(let wy=by+3;wy<5+48;wy+=5)
+          for(let wx=bx+1;wx<bx+8;wx+=4)
+            if(rr()<0.32) r(wx,wy,2,2,'#604010');
+      }
+      dropRain(rr,5,6,84,54,40,C.vblue);
+      // Window frame + mullions
+      r(4,4,82,1,C.tan); r(4,55,82,1,C.tan);
+      r(4,4,1,52,C.tan); r(85,4,1,52,C.tan);
+      r(44,4,1,52,C.tan); r(4,28,82,1,C.tan);
+
+      // Desk lamp center
+      r(152,4,18,2,C.damb); r(159,6,4,18,C.dwood);
+      const lg=cx.createRadialGradient(161,34,0,161,34,52);
+      lg.addColorStop(0,'rgba(192,112,16,0.44)'); lg.addColorStop(1,'rgba(192,112,16,0)');
+      cx.fillStyle=lg; cx.fillRect(98,8,128,50);
+
+      // Desk surface spanning desk zone
+      r(88,54,210,3,C.dwood); r(88,57,210,2,C.wood);
+
+      // Papers floating (anomaly: files themselves) — spread wide
+      [[96,42,-0.18,'#d8c888'],[116,38,0.07,C.cream],[136,41,-0.04,C.paper],
+       [156,37,0.14,C.cream],[176,40,-0.1,C.paper],[196,36,0.05,C.cream],[216,42,0.2,'#d8c888']].forEach(([px,py,ang,col])=>{
+        cx.save(); cx.translate(px+8,py+5); cx.rotate(ang);
+        r(-8,-5,16,10,col);
+        a(0.5,()=>{ cx.fillStyle=C.dblue; [[-6,-3],[-6,0],[-6,3]].forEach(([lx,ly])=>r(lx,ly,11,0.8,C.dblue)); });
+        cx.restore();
+      });
+
+      // Coffee mug + steam — right of desk
+      r(234,49,10,8,'#3a2010'); r(235,48,8,2,C.tan);
+      cx.strokeStyle='#3a2010'; cx.lineWidth=1.2;
+      cx.beginPath(); cx.arc(244,53,4,-Math.PI/2,Math.PI/2); cx.stroke();
+      cx.strokeStyle=C.lgrey; cx.lineWidth=0.7;
+      a(0.42,()=>[[233,47],[236,46],[239,47]].forEach(([sx,sy])=>{
+        cx.beginPath(); cx.moveTo(sx,sy); cx.quadraticCurveTo(sx-1,sy-4,sx+1,sy-8); cx.stroke();
+      }));
+
+      // Filing cabinet far left
+      r(0,16,18,42,C.mgrey);
+      [20,27,34,41,48].forEach(dy=>r(1,dy,16,5,C.stone));
+      r(1,16,16,1,C.lgrey);
+
+      // Bookcase far right
+      r(284,6,36,52,C.dwood);
+      [8,17,26,35,44].forEach(sy=>r(285,sy,34,1,C.dwood));
+      const bkC=['#8a1010','#0a4a0a','#10308a','#6a4808','#5a0a5a','#3a1008','#0a2a5a'];
+      [2,4,7,10,13,16,20,24,28].forEach((bx,i)=>r(286+bx,8,2,8,bkC[i%7]));
+
+      // Floor
+      r(0,59,NW,NH-59,C.dgrey); r(0,59,NW,1,C.mgrey);
+    },
+
+    warehouse() {
+      const rr=rng(73);
+      r(0,0,NW,NH,'#0a0a15');
+
+      // Walls
+      r(0,0,18,NH,C.dgrey); r(17,0,1,NH,C.stone);             // left
+      r(NW-16,0,16,NH,'#2e1a06'); r(NW-17,0,1,NH,'#5a3a18');  // right "floor"
+
+      // Ceiling
+      r(0,0,NW,7,'#131320');
+      // Overhead beams
+      for(let bx=22;bx<NW-18;bx+=36) r(bx,0,5,Math.round(NH*0.52),'#1a1a28');
+
+      // Two ceiling lamps
+      [NW*0.25,NW*0.62].forEach(lx=>{
+        r(lx,0,1,16,C.lgrey); r(lx-4,15,9,4,C.amber);
+        const wg=cx.createRadialGradient(lx,25,0,lx,25,26);
+        wg.addColorStop(0,'rgba(192,112,16,0.38)'); wg.addColorStop(1,'rgba(192,112,16,0)');
+        cx.fillStyle=wg; cx.fillRect(lx-26,15,52,32);
+      });
+
+      // Crates stacked 3-deep on right "floor" wall
+      const CW=16, CH=13;
+      const crateC=['#5a3a10','#4a2808','#6a4818'];
+      for(let cy=6;cy<NH-6;cy+=CH+3){
+        for(let layer=0;layer<3;layer++){
+          const ci=Math.floor(rr()*3);
+          const cxPos=NW-17-CW*(layer+1)-layer*2;
+          r(cxPos,cy,CW,CH,crateC[ci]);
+          r(cxPos,cy,CW,1,'#8a6828'); r(cxPos,cy,1,CH,'#8a6828');
+          r(cxPos+CW/2,cy,1,CH,crateC[(ci+1)%3]);
+          r(cxPos,cy+CH/2,CW,1,crateC[(ci+1)%3]);
+        }
+      }
+
+      // Mid-air falling crates (rotating toward right wall)
+      cx.save(); cx.translate(NW-108,20); cx.rotate(0.22);
+      r(0,0,CW,CH,crateC[0]); r(0,0,CW,1,'#8a6828'); r(0,0,1,CH,'#8a6828');
+      cx.restore();
+      cx.save(); cx.translate(NW-172,10); cx.rotate(0.46);
+      r(0,0,CW-2,CH-2,crateC[1]);
+      cx.restore();
+      cx.save(); cx.translate(NW-230,28); cx.rotate(-0.14);
+      r(0,0,CW,CH,crateC[2]); r(0,0,CW,1,'#8a6828');
+      cx.restore();
+
+      // Worker silhouettes on left wall (clinging)
+      [[18,28],[18,50]].forEach(([wx,wy])=>{
+        r(wx,wy,6,15,'#10080a'); r(wx+1,wy-3,4,4,'#28181a');
+        r(wx+6,wy+5,10,2,'#10080a'); // arm bracing
+      });
+
+      // Floating debris
+      for(let d=0;d<22;d++){
+        const dx=22+rr()*(NW-44), dy=9+rr()*(NH-20);
+        a(0.1+rr()*0.2,()=>r(dx,dy,rr()>0.5?2:1,1,'#8a6828'));
+      }
+    },
+
+    docks() {
+      const rr=rng(17);
+      // Wide night sky
+      cx.fillStyle=grad(0,0,0,Math.round(NH*0.5),[[0,'#040410'],[1,'#0a1420']]);
+      cx.fillRect(0,0,NW,Math.round(NH*0.5));
+
+      // Moon — high right
+      circle(NW-28,9,7,'#d8d0b8');
+      r(NW-27,7,4,2,'#c8c0a8'); r(NW-24,11,3,2,'#c8c0a8');
+
+      // Distant city silhouette spanning full width
+      for(let bx=0;bx<NW;bx+=10){
+        const bh=7+rr()*18;
+        r(bx,Math.round(NH*0.5)-bh,10,bh,'#04040e');
+        if(rr()<0.28) r(bx+2,Math.round(NH*0.5)-bh+4,3,3,'#503008');
+      }
+
+      // Water
+      const wY=Math.round(NH*0.5);
+      r(0,wY,NW,NH-wY,C.dwat);
+      for(let wi=0;wi<10;wi++) a(0.07+rr()*0.12,()=>r(rr()*NW,wY+1+wi*3,12+rr()*55,1,C.lblue));
+      // Moon shimmer — long diagonal streak
+      for(let mi=0;mi<7;mi++) a(0.28-mi*0.03,()=>r(NW-38+rr()*6,wY+mi*4,20-mi*2,1,'#c0b8a0'));
+
+      // Pier spans most of frame
+      const pY=wY-7;
+      r(0,pY,Math.round(NW*0.74),7,C.dwood);
+      for(let px=0;px<NW*0.74;px+=8) r(px,pY,1,7,C.wood);
+      r(0,pY,Math.round(NW*0.74),1,C.tan);
+      for(let post=5;post<NW*0.74;post+=26) r(post,pY+7,3,NH-pY-7,C.dwood);
+
+      // Two boats
+      r(10,pY-9,48,9,'#160804'); r(8,pY-6,52,4,'#20100a'); r(34,pY-26,1,18,C.dwood);
+      r(148,pY-8,40,8,'#160804'); r(146,pY-5,44,3,'#20100a'); r(168,pY-24,1,16,C.dwood);
+
+      // Stuttering clock (anomaly — time hiccup)
+      r(88,pY-18,16,14,'#252535'); r(89,pY-17,14,12,'#10101e');
+      a(0.25,()=>{ r(96,pY-13,1,5,C.cream); r(96,pY-12,5,1,C.cream); }); // ghost
+      r(96,pY-11,1,4,C.gold);    // hour
+      r(96,pY-11,3,1,C.cream);   // minute
+
+      // Fishermen
+      [[112,pY-10],[198,pY-10],[256,pY-10]].forEach(([fx,fy])=>{
+        r(fx,fy,5,10,'#08080f'); r(fx+1,fy-3,3,4,'#28180e');
+        cx.strokeStyle=C.lgrey; cx.lineWidth=0.5;
+        cx.beginPath(); cx.moveTo(fx+2,fy+9); cx.lineTo(fx+18,wY+12); cx.stroke();
+      });
+    },
+
+    financial() {
+      const rr=rng(29);
+      r(0,0,NW,NH,'#04040c');
+
+      // Dense financial district skyline — full width
+      skyline(rr,NH-7,
+        [[0,20,46],[22,24,56],[48,16,44],[66,26,60],[94,20,50],[116,24,56],
+         [142,16,46],[160,22,54],[184,26,60],[212,14,44],[228,20,52],[250,24,60],[276,16,46],[294,20,52]],
+        '#08081a','#604010',0.30);
+
+      // Street
+      r(0,NH-7,NW,7,'#0c0c18'); r(0,NH-8,NW,1,C.stone);
+
+      // REVERSED CAUSALITY: coins floating UPWARD — dense shower
+      for(let i=0;i<32;i++){
+        const gx=6+rr()*(NW-12), gy=8+rr()*56;
+        const sz=Math.floor(2+rr()*2);
+        r(gx,gy,sz*2,sz,C.gold);
+        a(0.5,()=>r(gx+1,gy,sz*1.4,1,C.bgold));
+      }
+
+      // Two shattered windows reassembling
+      [[62,14],[188,12]].forEach(([wX,wYY])=>{
+        r(wX,wYY,24,16,C.mblue); r(wX+1,wYY+1,22,14,'#080e18');
+        a(0.7,()=>{
+          cx.fillStyle='rgba(140,190,220,0.65)';
+          [[wX+26,wYY+4],[wX+30,wYY+12],[wX-7,wYY+7],[wX+10,wYY+22]].forEach(([sx,sy])=>{
+            cx.beginPath(); cx.moveTo(sx,sy); cx.lineTo(sx+5,sy-4); cx.lineTo(sx+7,sy+5); cx.closePath(); cx.fill();
+          });
+        });
+      });
+
+      // Floating newspaper (tomorrow's crash today)
+      cx.save(); cx.translate(248,22); cx.rotate(-0.12);
+      r(0,0,40,22,C.cream); r(1,0,38,5,'#b8a870');
+      cx.fillStyle='#1a1a2a'; cx.font='bold 3px monospace';
+      cx.fillText('MARKET CRASH',2,4); cx.fillText('TOMORROW',8,10);
+      cx.restore();
+
+      // Street lamps — evenly spaced across full width
+      [22,68,114,162,208,256,300].forEach(lx=>{
+        r(lx,NH-20,1,13,C.lgrey);
+        a(0.28,()=>{
+          const g2=cx.createRadialGradient(lx,NH-18,0,lx,NH-18,20);
+          g2.addColorStop(0,'rgba(192,112,16,0.5)'); g2.addColorStop(1,'rgba(192,112,16,0)');
+          cx.fillStyle=g2; cx.fillRect(lx-20,NH-20,40,24);
+        });
+      });
+    },
+
+    chinatown() {
+      const rr=rng(55);
+
+      // Night sky — dark, warmed by lantern glow rising from below
+      cx.fillStyle=grad(0,0,0,NH,[[0,'#040408'],[0.55,'#090410'],[1,'#110408']]);
+      cx.fillRect(0,0,NW,NH);
+
+      // Warm lantern bloom rising from mid-frame
+      cx.fillStyle=grad(0,NH*0.45,0,NH,[[0,'rgba(140,30,8,0)'],[1,'rgba(140,30,8,0.22)']]);
+      cx.fillRect(0,NH*0.45,NW,NH*0.55);
+
+      // Background building silhouettes — distant, dark
+      for(let bx=0;bx<NW;bx+=16){
+        const bh=10+rr()*12;
+        r(bx,32-bh,15,bh,'#060408');
+      }
+
+      // Main building row — unified dark tone, varied heights
+      for(let bx=0;bx<NW;bx+=18){
+        const bw=17, bh=16+rr()*18, by=42-bh;
+        r(bx,by,bw,bh,'#0c0408');
+        r(bx,by,bw,1,'#1a0810'); // roof cap
+        // A few dim amber windows
+        for(let wy=by+4;wy<40;wy+=6)
+          for(let wx=bx+3;wx<bx+bw-3;wx+=5)
+            if(rr()<0.22) r(wx,wy,3,3,'#6a2808');
+      }
+
+      // LANTERN STRINGS — the main visual feature, two horizontal wires
+      // Wire 1
+      cx.strokeStyle='#2a1206'; cx.lineWidth=0.7;
+      cx.beginPath(); cx.moveTo(0,42); cx.lineTo(NW,42); cx.stroke();
+      for(let lx=10;lx<NW;lx+=16){
+        const drop=1+rr()*2;
+        r(lx,42,1,drop,'#1a0a04');            // hanging string
+        r(lx-2,42+drop,5,6,'#cc1010');        // lantern body
+        r(lx-1,42+drop,3,1,'#ff4030');        // bright top edge
+        a(0.38,()=>{                           // soft glow
+          const lg=cx.createRadialGradient(lx,45+drop,0,lx,45+drop,7);
+          lg.addColorStop(0,'rgba(210,70,15,0.8)'); lg.addColorStop(1,'rgba(210,70,15,0)');
+          cx.fillStyle=lg; cx.fillRect(lx-7,40+drop,14,14);
+        });
+      }
+      // Wire 2 — offset, slightly lower
+      cx.strokeStyle='#1a0c04'; cx.lineWidth=0.5;
+      cx.beginPath(); cx.moveTo(0,50); cx.lineTo(NW,50); cx.stroke();
+      for(let lx=18;lx<NW;lx+=16){
+        const drop=1+rr()*2;
+        r(lx,50,1,drop,'#1a0a04');
+        r(lx-2,50+drop,4,5,'#a03010');
+        a(0.24,()=>{
+          const lg=cx.createRadialGradient(lx,52+drop,0,lx,52+drop,5);
+          lg.addColorStop(0,'rgba(180,50,10,0.7)'); lg.addColorStop(1,'rgba(180,50,10,0)');
+          cx.fillStyle=lg; cx.fillRect(lx-5,49+drop,10,10);
+        });
+      }
+
+      // Street
+      r(0,58,NW,NH-58,'#0e0204'); r(0,58,NW,1,'#1a0408');
+
+      // Subtle blue haze pooled at street level (blue has mass, sinks — anomaly)
+      cx.fillStyle=grad(0,56,0,NH,[[0,'rgba(30,60,160,0)'],[1,'rgba(30,60,160,0.28)']]);
+      cx.fillRect(0,56,NW,NH-56);
+
+      // A few floating blue objects near the top — restrained anomaly hint
+      [[18,6],[72,4],[148,8],[226,5],[292,7]].forEach(([ox,oy])=>{
+        r(ox,oy,7+rr()*9,3,'#3070b8');
+        a(0.22,()=>r(ox-1,oy+3,5+rr()*7,2,'#5090d0'));
+      });
+
+      // Merchant silhouettes on street
+      [24,64,108,154,200,248,292].forEach(fx=>{
+        r(fx,NH-11,4,8,'#04000a'); r(fx+1,NH-14,3,4,'#5a2818');
+      });
+    },
+
+    uptown() {
+      const rr=rng(91);
+      r(0,0,NW,NH,'#040410');
+
+      // Elegant buildings — wide panorama both sides
+      [[0,22,50],[24,18,56],[44,24,50],[70,16,58],[88,22,52],[112,18,58],
+       [132,22,52],[156,20,56],[178,18,50],[200,24,56],[226,16,58],[244,18,52],
+       [264,22,50],[288,20,54],[310,10,52]].forEach(([bx,bw,bh])=>{
+        const by=NH-bh-7;
+        r(bx,by,bw,bh,'#08081a'); r(bx,by,bw,2,'#141428');
+        for(let wy=by+6;wy<by+bh-5;wy+=7)
+          for(let wx=bx+4;wx<bx+bw-4;wx+=6)
+            if(rr()>0.6) r(wx,wy,3,4,'#5a3008');
+      });
+      r(0,NH-7,NW,7,'#08080f'); r(0,NH-8,NW,1,'#181828');
+
+      // Lampposts + their SOLID SHADOWS (the anomaly — shadows are physical objects)
+      [18,58,98,140,180,222,262,302].forEach(lx=>{
+        const ly=NH-20;
+        r(lx,ly,1,12,C.lgrey);    // thin pole — 1px, no T crossbar
+        r(lx-1,ly,3,1,C.lgrey);   // tiny cap dot at top
+        // Floor-level light pool only — no halo around lamp head
+        a(0.24,()=>{
+          const fp=cx.createRadialGradient(lx,NH-7,0,lx,NH-7,13);
+          fp.addColorStop(0,'rgba(192,112,16,0.6)'); fp.addColorStop(1,'rgba(192,112,16,0)');
+          cx.fillStyle=fp; cx.fillRect(lx-13,NH-14,26,14);
+        });
+        a(0.85,()=>{
+          cx.save(); cx.transform(1,0,-0.5,0.25,0,0);
+          r(lx+Math.round(NH*0.32),Math.round(ly*0.46),2,12,'#000008');
+          r(lx+Math.round(NH*0.32)-4,Math.round(ly*0.46),10,1,'#000008');
+          cx.restore();
+        });
+      });
+
+      // People + detached solid shadows
+      [[32,NH-7],[94,NH-7],[164,NH-7],[236,NH-7],[298,NH-7]].forEach(([px,py])=>{
+        r(px,py-12,5,12,'#08061a'); r(px+1,py-15,3,4,'#221610');
+        r(px+8,py-10,4,10,'#000006'); r(px+9,py-13,2,3,'#000006');
+        r(px+10,py-5,6,4,'#00000a');
+      });
+
+      // Shadow market stall
+      r(120,NH-19,30,12,'#0a0a18'); r(121,NH-18,28,10,'#060610');
+      for(let si=0;si<5;si++) a(0.7,()=>r(123+si*5,NH-14,3,7,'#000008'));
+    },
+
+    underground() {
+      const rr=rng(63);
+      r(0,0,NW,NH,'#020206');
+
+      // Brick wall — full width
+      for(let by=0;by<Math.round(NH*0.62);by+=6)
+        for(let bx=(by%12===0?0:4);bx<NW;bx+=10)
+          r(bx,by,9,5,'#160a06');
+
+      // Stage — wide center platform
+      const stY=Math.round(NH*0.58);
+      const stX=Math.round(NW*0.1), stW=Math.round(NW*0.8);
+      r(stX,stY,stW,7,C.dwood); r(stX,stY,stW,1,'#6a4020');
+
+      // Stage spotlights (5 beams)
+      [[NW*0.18,C.red],[NW*0.34,C.amber],[NW*0.5,C.gold],[NW*0.66,'#3a6ab8'],[NW*0.82,C.purp]].forEach(([lx,lc])=>{
+        r(lx-2,0,5,3,C.lgrey);
+        a(0.09,()=>{ cx.fillStyle=lc; cx.beginPath(); cx.moveTo(lx,3); cx.lineTo(lx-22,stY); cx.lineTo(lx+22,stY); cx.closePath(); cx.fill(); });
+      });
+
+      // Performer center stage
+      const pX=NW*0.5, pY=stY-12;
+      r(pX-3,pY,7,12,'#04040c'); r(pX-2,pY-4,5,4,'#1a0a06');
+      r(pX-9,pY+3,6,2,'#04040c'); r(pX+6,pY+3,6,2,'#04040c');
+
+      // VISIBLE SOUND WAVES radiating from stage (the anomaly) — restrained
+      const waveColors=[C.red,C.gold,'#3a7ab8',C.purp,'#20806a'];
+      for(let w=1;w<=5;w++){
+        a(0.28/w,()=>{
+          cx.strokeStyle=waveColors[w%waveColors.length]; cx.lineWidth=1;
+          cx.beginPath(); cx.arc(NW*0.5,stY,w*22,Math.PI,2*Math.PI); cx.stroke();
+        });
+      }
+      // Sound particles — sparse scatter, low opacity
+      for(let sp=0;sp<16;sp++){
+        const sx=6+rr()*(NW-12), sy=6+rr()*(stY-12);
+        a(0.08+rr()*0.14,()=>r(sx,sy,rr()>0.5?2:1,1,waveColors[Math.floor(rr()*waveColors.length)]));
+      }
+
+      // Wide crowd
+      for(let ci=0;ci<22;ci++){
+        const hx=6+ci*14;
+        r(hx,stY+7,6,10,'#020208'); r(hx+1,stY+4,4,4,'#060404');
+      }
+
+      // Neon sign
+      a(0.55,()=>{ cx.fillStyle=C.red; cx.font='bold 4px monospace'; cx.fillText('CLUB PARADOX',5,10); });
+      a(0.4,()=>{ cx.fillStyle=C.grn; cx.font='bold 4px monospace'; cx.fillText('EXIT',NW-28,10); });
+    },
+
+    cityhall() {
+      const rr=rng(108);
+      // Ominous convergence sky
+      cx.fillStyle=grad(0,0,0,NH,[[0,'#04040f'],[0.5,'#080416'],[1,'#0f0608']]);
+      cx.fillRect(0,0,NW,NH);
+
+      // Flanking buildings left and right (city closing in)
+      [[0,18,46],[20,14,54],[36,20,42]].forEach(([bx,bw,bh])=>{
+        const by=NH-bh;
+        r(bx,by,bw,bh,'#06060f');
+        for(let wy=by+4;wy<by+bh-3;wy+=6)
+          for(let wx=bx+2;wx<bx+bw-2;wx+=5)
+            if(rr()<0.28) r(wx,wy,3,3,'#503008');
+      });
+      [[NW-56,18,46],[NW-38,14,54],[NW-18,20,42]].forEach(([bx,bw,bh])=>{
+        const by=NH-bh;
+        r(bx,by,bw,bh,'#06060f');
+        for(let wy=by+4;wy<by+bh-3;wy+=6)
+          for(let wx=bx+2;wx<bx+bw-2;wx+=5)
+            if(rr()<0.28) r(wx,wy,3,3,'#503008');
+      });
+
+      // Grand City Hall — center dominant
+      const chX=Math.round(NW*0.16), chW=Math.round(NW*0.68), chY=8;
+      r(chX,chY,chW,Math.round(NH*0.77),'#0c0c1e');
+      // Ten columns across wide facade
+      for(let col=0;col<10;col++){
+        const colX=chX+10+col*(chW-20)/9;
+        r(colX,chY+4,4,Math.round(NH*0.77)-4,'#14142a');
+        r(colX+1,chY+4,2,Math.round(NH*0.77)-4,'#1a1a32');
+      }
+      // Pediment
+      cx.fillStyle='#101022'; cx.beginPath();
+      cx.moveTo(chX-6,chY); cx.lineTo(chX+chW/2,chY-12); cx.lineTo(chX+chW+6,chY); cx.closePath(); cx.fill();
+      // Lit windows
+      for(let row=0;row<3;row++) for(let col=0;col<7;col++){
+        const wx=chX+16+col*(chW-32)/6, wy=chY+14+row*16;
+        if(rr()>0.28){ r(wx,wy,8,9,C.damb); a(0.7,()=>r(wx+1,wy+1,6,7,C.amber)); }
+      }
+      // Steps
+      for(let s=0;s<4;s++) r(chX-s*4,Math.round(NH*0.85)+s*3,chW+s*8,3,`rgb(${14+s*5},${14+s*5},${28+s*5})`);
+
+      // ALL ANOMALIES CONVERGING:
+      // Flying papers (office)
+      for(let p=0;p<8;p++){
+        cx.save(); cx.translate(4+rr()*chX*0.85,chY-4+rr()*20); cx.rotate((rr()-0.5)*0.6);
+        r(0,0,9,6,C.cream); cx.restore();
+      }
+      for(let p=0;p<6;p++){
+        cx.save(); cx.translate(chX+chW+4+rr()*chX*0.85,chY+rr()*20); cx.rotate((rr()-0.5)*0.5);
+        r(0,0,8,5,C.paper); cx.restore();
+      }
+      // Rising coins (financial)
+      for(let c=0;c<18;c++) r(4+rr()*chX,chY+rr()*52,4,2,C.gold);
+      for(let c=0;c<14;c++) r(chX+chW+4+rr()*chX,chY+rr()*46,4,2,C.gold);
+      // Floating blue (chinatown)
+      for(let b=0;b<8;b++) a(0.5,()=>r(4+rr()*chX*0.9,chY+rr()*40,6,3,'#3880c8'));
+      // Sound arc (underground)
+      a(0.28,()=>{ cx.strokeStyle=C.red; cx.lineWidth=1; cx.beginPath(); cx.arc(chX+chW/2,chY+10,40,0,Math.PI*2); cx.stroke(); });
+      // Solid shadow bar (uptown)
+      a(0.8,()=>r(chX+22,Math.round(NH*0.86),48,7,'#00000a'));
+
+      // The Machine — glowing under City Hall
+      const mX=Math.round(chX+chW/2);
+      r(mX-18,Math.round(NH*0.76),36,10,'#08041a');
+      r(mX-15,Math.round(NH*0.77),30,8,'#04020e');
+      const mg=cx.createRadialGradient(mX,Math.round(NH*0.81),0,mX,Math.round(NH*0.81),18);
+      mg.addColorStop(0,'rgba(120,40,210,0.9)'); mg.addColorStop(0.5,'rgba(80,20,160,0.4)'); mg.addColorStop(1,'rgba(0,0,0,0)');
+      cx.fillStyle=mg; cx.fillRect(mX-20,Math.round(NH*0.75),40,14);
+    },
+  };
+
+  return {
+    draw(locId) {
+      if (!cv) init();
+      SceneAnimator.stop();           // halt previous location's animation
+      cx.clearRect(0,0,NW,NH);
+      const scene = scenes[locId];
+      if (scene) {
+        scene();
+        // Vignette — wide canvas so use NW-proportioned radii
+        const vig=cx.createRadialGradient(NW/2,NH/2,NW*0.14,NW/2,NH/2,NW*0.56);
+        vig.addColorStop(0,'rgba(0,0,0,0)'); vig.addColorStop(1,'rgba(0,0,0,0.62)');
+        cx.fillStyle=vig; cx.fillRect(0,0,NW,NH);
+      }
+      cv.classList.add('ready');
+      SceneAnimator.start(locId);     // begin this location's animation layer
+    }
+  };
+})();
+
+/* ════════════════════════════════════════════════════════════
+   SCENE ANIMATOR  — rAF particle + fx layer over static scene
+════════════════════════════════════════════════════════════ */
+const SceneAnimator = (() => {
+  const NW = 320, NH = 80, MAX_P = 80;
+  let rafId = null, elapsed = 0, lastTs = null;
+  let curLoc = null, cv = null, ctx = null, bgData = null;
+  let particles = [];
+
+  function stop() {
+    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+    particles = []; lastTs = null;
+  }
+
+  const mkP = (x,y,vx,vy,col,al,sz,fade=0.982) => ({x,y,vx,vy,col,al,sz,fade});
+
+  const CFG = {
+    office: {
+      emit() {
+        // Rain streaks within the left window (x:5-83, y:5-54)
+        if (particles.length < MAX_P && Math.random() < 0.35)
+          particles.push(mkP(6+Math.random()*76, 5+Math.random()*48, -0.4, 2.0, '#6aaad8', 0.10+Math.random()*0.14, 0.7, 0.972));
+        // Paper shimmer — very occasional
+        if (particles.length < MAX_P && Math.random() < 0.025)
+          particles.push(mkP(98+Math.random()*130, 36+Math.random()*9, (Math.random()-.5)*.1, -0.06, '#d8c898', 0.10, 2, 0.962));
+      },
+      extra(t) {
+        const glow = (Math.sin(t*5.8)+1)*.5*.033;
+        ctx.globalAlpha = glow;
+        const lg = ctx.createRadialGradient(161,34,0,161,34,38);
+        lg.addColorStop(0,'rgba(192,112,16,1)'); lg.addColorStop(1,'rgba(192,112,16,0)');
+        ctx.fillStyle = lg; ctx.fillRect(124,8,74,50);
+        ctx.globalAlpha = 1;
+      }
+    },
+    warehouse: {
+      emit() {
+        // Dust motes drifting rightward (sideways gravity effect)
+        if (particles.length < MAX_P && Math.random() < 0.18)
+          particles.push(mkP(20+Math.random()*240, 8+Math.random()*(NH-16), 0.85+Math.random()*.6, (Math.random()-.5)*.14, '#8a6828', 0.05+Math.random()*.08, Math.random()>.5?2:1, 0.986));
+      },
+      extra(t) {
+        const f = Math.max(0, Math.sin(t*9.8)*.028+Math.sin(t*22.3)*.016);
+        [NW*.25, NW*.62].forEach(lx => {
+          ctx.globalAlpha = f;
+          const wg = ctx.createRadialGradient(lx,25,0,lx,25,28);
+          wg.addColorStop(0,'rgba(192,112,16,1)'); wg.addColorStop(1,'rgba(192,112,16,0)');
+          ctx.fillStyle = wg; ctx.fillRect(lx-28,14,56,34);
+          ctx.globalAlpha = 1;
+        });
+      }
+    },
+    docks: {
+      emit() {
+        if (particles.length < MAX_P && Math.random() < 0.10)
+          particles.push(mkP(Math.random()*NW, 41+Math.random()*36, (Math.random()-.5)*.28, 0, '#4a8ab8', 0.05+Math.random()*.10, Math.random()>.6?2:1, 0.940));
+      },
+      extra(t) {
+        const sw = Math.sin(t*1.6)*2.5;
+        ctx.strokeStyle = '#6a6a7a'; ctx.lineWidth = 0.5;
+        [[112,26],[198,26],[256,26]].forEach(([fx,fy]) => {
+          ctx.globalAlpha = 0.42;
+          ctx.beginPath(); ctx.moveTo(fx+2,fy+9); ctx.lineTo(fx+18+sw,41+12); ctx.stroke();
+        });
+        ctx.globalAlpha = 1;
+      }
+    },
+    financial: {
+      emit() {
+        if (particles.length < MAX_P && Math.random() < 0.16) {
+          const sz = 2+Math.floor(Math.random()*2);
+          particles.push(mkP(6+Math.random()*(NW-12), 62+Math.random()*11, (Math.random()-.5)*.18, -(0.32+Math.random()*.32), '#d4a843', 0.28+Math.random()*.20, sz*2, 0.993));
+        }
+      },
+      extra(t) {
+        const glow = Math.max(0, Math.sin(t*7.6)*.02);
+        if (glow > 0) {
+          [22,68,114,162,208,256,300].forEach(lx => {
+            ctx.globalAlpha = glow;
+            const g2 = ctx.createRadialGradient(lx,NH-18,0,lx,NH-18,18);
+            g2.addColorStop(0,'rgba(192,112,16,1)'); g2.addColorStop(1,'rgba(192,112,16,0)');
+            ctx.fillStyle = g2; ctx.fillRect(lx-18,NH-22,36,22);
+            ctx.globalAlpha = 1;
+          });
+        }
+      }
+    },
+    chinatown: {
+      emit() {
+        // Occasional blue mote drifting upward from street (blue is weightless)
+        if (particles.length < MAX_P && Math.random() < 0.08)
+          particles.push(mkP(4+Math.random()*(NW-12), 58+Math.random()*16, (Math.random()-.5)*.2, -(0.3+Math.random()*.3), '#3070b8', 0.08+Math.random()*.10, 2+Math.random()*3, 0.988));
+      },
+      extra(t) {
+        // Lantern flicker — very gentle warm pulse over the lantern zone
+        const f = (Math.sin(t*6.4)+1)*.5*.018;
+        ctx.globalAlpha = f;
+        ctx.fillStyle = '#c03008';
+        ctx.fillRect(0,38,NW,22);
+        ctx.globalAlpha = 1;
+      }
+    },
+    uptown: {
+      emit() { /* shadow district is mostly still */ },
+      extra(t) {
+        // Flicker the floor-level light pools (not a halo — just the ground glow)
+        const lf = Math.max(0, Math.sin(t*11.4)*.022);
+        if (lf > 0) {
+          [18,58,98,140,180,222,262,302].forEach(lx => {
+            ctx.globalAlpha = lf;
+            const fp = ctx.createRadialGradient(lx,NH-7,0,lx,NH-7,13);
+            fp.addColorStop(0,'rgba(192,112,16,0.7)'); fp.addColorStop(1,'rgba(192,112,16,0)');
+            ctx.fillStyle = fp; ctx.fillRect(lx-13,NH-14,26,14);
+            ctx.globalAlpha = 1;
+          });
+        }
+        // Shadow shimmer — a slow dark pulse at ground level (the anomaly breathing)
+        ctx.globalAlpha = 0.018+Math.abs(Math.sin(t*3.1))*.022;
+        ctx.fillStyle = '#000008';
+        ctx.fillRect(0,NH-18,NW,14);
+        ctx.globalAlpha = 1;
+      }
+    },
+    underground: {
+      emit() {
+        // Very sparse — just an occasional colour mote drifting upward
+        if (particles.length < MAX_P && Math.random() < 0.10) {
+          const cols = ['#c23b22','#d4a843','#3a7ab8','#6a1a8a','#20806a'];
+          particles.push(mkP(8+Math.random()*(NW-16), 28+Math.random()*18, (Math.random()-.5)*.24, -(0.18+Math.random()*.22), cols[Math.floor(Math.random()*cols.length)], 0.08+Math.random()*.10, Math.random()>.5?2:1, 0.988));
+        }
+      },
+      extra(t) {
+        // Two slow, very faint expanding arcs — just a hint of the anomaly
+        const stY = Math.round(NH*.58);
+        const wCols = ['#c23b22','#d4a843','#3a7ab8','#6a1a8a','#20806a'];
+        const phase = (t*.22) % 1;
+        for (let w=0; w<2; w++) {
+          const rr = ((phase+w/2)%1)*130;
+          const al = Math.max(0, 0.10*(1-rr/130));
+          if (al < 0.005) continue;
+          ctx.globalAlpha = al;
+          ctx.strokeStyle = wCols[w%wCols.length]; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(NW*.5, stY, rr, Math.PI, 2*Math.PI); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
+    },
+    cityhall: {
+      emit() {
+        if (particles.length < MAX_P-10 && Math.random() < 0.2) {
+          const left = Math.random() < .5;
+          particles.push(mkP(left?4+Math.random()*50:266+Math.random()*50, 12+Math.random()*48, (Math.random()-.5)*.16, -(0.26+Math.random()*.32), '#d4a843', 0.38+Math.random()*.26, 4, 0.993));
+        }
+      },
+      extra(t) {
+        const chX=Math.round(NW*.16), chW=Math.round(NW*.68), mX=Math.round(chX+chW/2);
+        const pulse=(Math.sin(t*2.1)+1)*.5;
+        ctx.globalAlpha = 0.22+pulse*.36;
+        const mg = ctx.createRadialGradient(mX,Math.round(NH*.81),0,mX,Math.round(NH*.81),24);
+        mg.addColorStop(0,'rgba(120,40,210,1)'); mg.addColorStop(.5,'rgba(80,20,160,.5)'); mg.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle = mg; ctx.fillRect(mX-26,Math.round(NH*.73),52,18);
+        ctx.globalAlpha = 0.028+Math.abs(Math.sin(t*1.4))*.022;
+        ctx.fillStyle = '#3880c8'; ctx.fillRect(0,0,56,NH);
+        ctx.fillStyle = '#d4a843'; ctx.fillRect(NW-56,0,56,NH);
+        ctx.globalAlpha = 1;
+      }
+    },
+  };
+
+  function tick(ts) {
+    if (!lastTs) lastTs = ts;
+    elapsed += Math.min((ts-lastTs)/1000, 0.05);
+    lastTs = ts;
+    ctx.putImageData(bgData, 0, 0);
+    const cfg = CFG[curLoc];
+    if (cfg) {
+      if (particles.length < MAX_P) cfg.emit?.();
+      for (let i=particles.length-1; i>=0; i--) {
+        const p=particles[i];
+        p.x+=p.vx; p.y+=p.vy; p.al*=p.fade;
+        if (p.al<0.02||p.x<-6||p.x>NW+6||p.y<-6||p.y>NH+6) { particles.splice(i,1); continue; }
+        ctx.globalAlpha=p.al; ctx.fillStyle=p.col;
+        ctx.fillRect(Math.round(p.x),Math.round(p.y),p.sz,Math.max(1,Math.round(p.sz*.5)));
+      }
+      ctx.globalAlpha=1;
+      cfg.extra?.(elapsed);
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+
+  return {
+    start(locId) {
+      stop();
+      curLoc=locId; elapsed=0;
+      if (!cv) { cv=document.getElementById('scene-canvas'); ctx=cv.getContext('2d'); }
+      bgData=ctx.getImageData(0,0,NW,NH);
+      rafId=requestAnimationFrame(tick);
+    },
+    stop,
+  };
+})();
+
+/* ════════════════════════════════════════════════════════════
+   NOIR MUSIC ENGINE  — procedural Web Audio API
+════════════════════════════════════════════════════════════ */
+const Music = (() => {
+  let ctx = null, master = null, verb = null;
+  let muted = false, beat = 0, nextBeat = 0;
+  const TEMPO = 50;          // BPM — slow, heavy, brooding
+  const SPB   = 60 / TEMPO; // seconds per beat
+
+  // Note frequencies (Hz)
+  const N = {
+    A2:110.00, Bb2:116.54, B2:123.47, C3:130.81, Db3:138.59,
+    D3:146.83, Eb3:155.56, E3:164.81, F3:174.61, Gb3:185.00,
+    G3:196.00, Ab3:207.65, A3:220.00, Bb3:233.08, B3:246.94,
+    C4:261.63, Db4:277.18, D4:293.66, Eb4:311.13, E4:329.63,
+    F4:349.23, Gb4:369.99, G4:392.00, Ab4:415.30, A4:440.00,
+    Bb4:466.16, B4:493.88, C5:523.25, Db5:554.37, D5:587.33,
+    Eb5:622.25, E5:659.25,
+  };
+
+  // Walking bass — tritone leaps, chromatic approach notes, direction changes.
+  // null = rest (silence is part of the feel).
+  // 16 beats across 4 bars: Am(b5) → chromatic descent → Dm9 → E7b9 tritone sub
+  const BASS = [
+    N.A2,  N.Eb3, N.D3,  N.C3,   // bar 1: tritone leap up, then descend
+    N.B2,  N.Bb2, N.A2,  null,   // bar 2: chromatic creep down, breath
+    N.D3,  N.Ab3, N.G3,  N.F3,   // bar 3: Dm with tritone colour
+    N.E3,  N.Bb2, N.B2,  N.A2,   // bar 4: tritone sub E→Bb, chromatic home
+  ];
+
+  // Chord events scheduled relative to phrase start (beat 0).
+  // Syncopated — NOT on every bar downbeat.
+  const CHORD_EVS = [
+    { b: 0,    fs: [N.A3,N.C4,N.E4,N.G4],         dur: 4.0, vol: 0.048 }, // Am7  on 1
+    { b: 2.5,  fs: [N.A3,N.C4,N.Eb4,N.G4],        dur: 1.8, vol: 0.022 }, // Am7#11 ghost — syncopated
+    { b: 8,    fs: [N.D3,N.F3,N.A3,N.C4],          dur: 3.5, vol: 0.048 }, // Dm7  on 1 of bar 3
+    { b: 13.5, fs: [N.E3,N.Ab3,N.Bb3,N.D4],        dur: 3.0, vol: 0.052 }, // E7b9 syncopated late
+  ];
+
+  // Melody — harmon-muted trumpet feel. Very sparse, long notes.
+  // Each entry: beat position in phrase, frequency, duration in beats.
+  const MEL_EVS = [
+    { b: 1,    f: N.E5,  d: 2.4 },
+    { b: 5.5,  f: N.D5,  d: 1.8 },
+    { b: 8.5,  f: N.C5,  d: 2.8 },
+    { b: 13,   f: N.B4,  d: 2.0 },
+  ];
+
+  // Subtle random timing nudge — keeps it from sounding like a machine
+  const jitter = () => (Math.random() - 0.5) * 0.022;
+
+  function makeReverb() {
+    const conv = ctx.createConvolver();
+    const sr = ctx.sampleRate, len = Math.floor(sr * 3.2);
+    const buf = ctx.createBuffer(2, len, sr);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < len; i++)
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.35);
+    }
+    conv.buffer = buf;
+    return conv;
+  }
+
+  // Upright bass — sawtooth through a tight lowpass
+  function playBass(freq, t) {
+    t += jitter();
+    const osc = ctx.createOscillator();
+    const lp  = ctx.createBiquadFilter();
+    const g   = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.value = freq;
+    lp.type = 'lowpass'; lp.frequency.value = 250; lp.Q.value = 0.5;
+    const dur = SPB * 0.76;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.2, t + 0.028);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(lp); lp.connect(g); g.connect(master);
+    osc.start(t); osc.stop(t + dur + 0.04);
+  }
+
+  // Piano chord — stacked sine harmonics, long decay, all through reverb
+  function playChord(freqs, t, durBeats, vol) {
+    t += jitter();
+    const dur = durBeats * SPB;
+    freqs.forEach(freq => {
+      [1, 2, 3].forEach((h, i) => {
+        const osc = ctx.createOscillator();
+        const g   = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq * h;
+        const v = vol / Math.pow(i + 1, 1.5);
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(v, t + 0.014);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.82);
+        osc.connect(g); g.connect(verb);
+        osc.start(t); osc.stop(t + dur);
+      });
+    });
+  }
+
+  // Muted trumpet — triangle wave + vibrato LFO, slow attack, lots of reverb
+  function playTrumpet(freq, t, durBeats) {
+    t += jitter();
+    const dur = durBeats * SPB;
+    const osc  = ctx.createOscillator();
+    const lfo  = ctx.createOscillator();
+    const lfog = ctx.createGain();
+    const bp   = ctx.createBiquadFilter(); // nasal bandpass colour
+    const g    = ctx.createGain();
+    const gDry = ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+
+    // Vibrato: ~5 Hz, ±0.6%
+    lfo.type = 'sine'; lfo.frequency.value = 5.1;
+    lfog.gain.value = freq * 0.006;
+    lfo.connect(lfog); lfog.connect(osc.frequency);
+
+    // Bandpass adds harmon-mute nasality
+    bp.type = 'bandpass'; bp.frequency.value = freq * 1.8; bp.Q.value = 1.2;
+
+    // Slow attack, long tail
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.06, t + 0.12);
+    g.gain.setValueAtTime(0.06, t + dur * 0.55);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.96);
+
+    // Dry signal mixed lower
+    gDry.gain.value = 0.35;
+
+    osc.connect(bp); bp.connect(g);
+    g.connect(verb);        // wet — through reverb
+    g.connect(gDry); gDry.connect(master); // dry — direct
+
+    lfo.start(t); lfo.stop(t + dur + 0.1);
+    osc.start(t); osc.stop(t + dur + 0.1);
+  }
+
+  function schedule() {
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    while (nextBeat < now + 0.3) {
+      const b = beat % 16;
+
+      // Walking bass every beat (nulls = rest)
+      if (BASS[b] !== null) playBass(BASS[b], nextBeat);
+
+      // On phrase downbeat, schedule all chords + melody for this phrase
+      if (b === 0) {
+        const p = nextBeat;
+        CHORD_EVS.forEach(ev => playChord(ev.fs, p + ev.b * SPB, ev.dur, ev.vol));
+        MEL_EVS.forEach(ev => playTrumpet(ev.f, p + ev.b * SPB, ev.d));
+      }
+
+      nextBeat += SPB;
+      beat++;
+    }
+    setTimeout(schedule, 60);
+  }
+
+  function updateBtn() {
+    const btn = document.getElementById('music-btn');
+    if (btn) btn.textContent = muted ? '♪ MUTED' : '♪ MUSIC';
+  }
+
+  return {
+    start() {
+      if (ctx) return;
+      ctx    = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain();
+      master.gain.value = 0.75;
+      verb   = makeReverb();
+      const vg = ctx.createGain();
+      vg.gain.value = 0.42;
+      verb.connect(vg); vg.connect(master);
+      master.connect(ctx.destination);
+      nextBeat = ctx.currentTime + 0.5;
+      beat     = 0;
+      schedule();
+    },
+    toggle() {
+      if (!ctx) return;
+      muted = !muted;
+      master.gain.setTargetAtTime(muted ? 0 : 0.75, ctx.currentTime, 0.4);
+      updateBtn();
+    },
+    isMuted() { return muted; },
+    getCtx()  { return ctx; },
+  };
+})();
+
+/* ════════════════════════════════════════════════════════════
+   SOUND CUES  — short procedural stings via Web Audio API
+════════════════════════════════════════════════════════════ */
+const Sounds = (() => {
+  // Share Music's AudioContext (created on first user gesture with Music.start())
+  function ac() { return Music.getCtx(); }
+
+  function playClue() {
+    // Tense dissonant chord hit — "evidence secured"
+    // Am7b5 cluster: A2, Eb3, G3, C4 (half-diminished colour)
+    try {
+      const a = ac(); if (!a) return;
+      const now = a.currentTime;
+      const master = a.createGain();
+      master.gain.setValueAtTime(0, now);
+      master.gain.linearRampToValueAtTime(0.20, now+0.016);
+      master.gain.exponentialRampToValueAtTime(0.001, now+2.8);
+      master.connect(a.destination);
+
+      [110, 155.56, 196, 261.63].forEach((freq, i) => {
+        const osc = a.createOscillator(), filt = a.createBiquadFilter(), g = a.createGain();
+        osc.type = 'sawtooth'; osc.frequency.value = freq;
+        filt.type = 'lowpass'; filt.frequency.value = 480+i*140; filt.Q.value = 1.6;
+        g.gain.value = 0.62-i*.09;
+        osc.connect(filt); filt.connect(g); g.connect(master);
+        osc.start(now+i*.011); osc.stop(now+3.0);
+      });
+
+      // High Eb5 shimmer (tritone against A — maximum dissonance)
+      const sh = a.createOscillator(), shG = a.createGain();
+      sh.type = 'triangle'; sh.frequency.value = 622.25;
+      shG.gain.setValueAtTime(0, now+.08);
+      shG.gain.linearRampToValueAtTime(0.038, now+.38);
+      shG.gain.exponentialRampToValueAtTime(0.001, now+2.5);
+      sh.connect(shG); shG.connect(master);
+      sh.start(now+.08); sh.stop(now+2.8);
+    } catch(_) {}
+  }
+
+  function playTravel() {
+    // Low thud + brief filtered whoosh — moving between districts
+    try {
+      const a = ac(); if (!a) return;
+      const now = a.currentTime;
+
+      // Thud: sine sweep down
+      const thud = a.createOscillator(), tg = a.createGain();
+      thud.type = 'sine';
+      thud.frequency.setValueAtTime(68, now);
+      thud.frequency.exponentialRampToValueAtTime(26, now+.26);
+      tg.gain.setValueAtTime(0.20, now);
+      tg.gain.exponentialRampToValueAtTime(0.001, now+.28);
+      thud.connect(tg); tg.connect(a.destination);
+      thud.start(now); thud.stop(now+.32);
+
+      // Whoosh: bandpass noise sweep
+      const bufLen = Math.floor(a.sampleRate*.32);
+      const buf = a.createBuffer(1,bufLen,a.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i=0;i<bufLen;i++) d[i]=Math.random()*2-1;
+      const noise = a.createBufferSource();
+      noise.buffer = buf;
+      const filt = a.createBiquadFilter();
+      filt.type = 'bandpass';
+      filt.frequency.setValueAtTime(360, now);
+      filt.frequency.exponentialRampToValueAtTime(95, now+.32);
+      filt.Q.value = 3.2;
+      const ng = a.createGain();
+      ng.gain.setValueAtTime(0.065, now);
+      ng.gain.exponentialRampToValueAtTime(0.001, now+.32);
+      noise.connect(filt); filt.connect(ng); ng.connect(a.destination);
+      noise.start(now); noise.stop(now+.36);
+    } catch(_) {}
+  }
+
+  function playCityhall() {
+    // Ominous rising chromatic cluster swell — entering the source
+    try {
+      const a = ac(); if (!a) return;
+      const now = a.currentTime;
+      const master = a.createGain();
+      master.gain.setValueAtTime(0, now);
+      master.gain.linearRampToValueAtTime(0.14, now+2.0);
+      master.gain.linearRampToValueAtTime(0.09, now+3.8);
+      master.gain.exponentialRampToValueAtTime(0.001, now+6.2);
+      master.connect(a.destination);
+
+      // A1, Bb1, B1, C2 — staggered entries, slight pitch-rise
+      [55, 58.27, 61.74, 65.41].forEach((freq, i) => {
+        const osc=a.createOscillator(), filt=a.createBiquadFilter(), g=a.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, now+i*.38);
+        osc.frequency.linearRampToValueAtTime(freq*1.014, now+5.8);
+        filt.type = 'lowpass';
+        filt.frequency.setValueAtTime(260, now+i*.38);
+        filt.frequency.linearRampToValueAtTime(860, now+4.2);
+        filt.Q.value = 1.6;
+        g.gain.value = 0.54-i*.08;
+        osc.connect(filt); filt.connect(g); g.connect(master);
+        osc.start(now+i*.38); osc.stop(now+6.8);
+      });
+
+      // Eb3 tritone — enters midway, crystallizes the dread
+      const hi=a.createOscillator(), hiG=a.createGain();
+      hi.type = 'triangle'; hi.frequency.value = 155.56;
+      hiG.gain.setValueAtTime(0, now+2.0);
+      hiG.gain.linearRampToValueAtTime(0.06, now+3.2);
+      hiG.gain.exponentialRampToValueAtTime(0.001, now+6.2);
+      hi.connect(hiG); hiG.connect(master);
+      hi.start(now+2.0); hi.stop(now+6.8);
+    } catch(_) {}
+  }
+
+  return { playClue, playTravel, playCityhall };
+})();
+
+document.addEventListener('DOMContentLoaded', () => {
+  initRain();
+
+  // Show resume button if a previous save exists
+  if (SaveManager.hasSave()) {
+    const m = SaveManager.meta();
+    document.getElementById('resume-btn').style.display = '';
+    const hint = document.getElementById('save-hint');
+    hint.style.display = '';
+    if (m) {
+      const loc = m.loc ? (LOC_LABELS[m.loc] || m.loc) : '?';
+      hint.textContent = `Last save: ${loc} · ${m.clues} clue${m.clues===1?'':'s'} · turn ${m.turn}`;
+    }
+  }
+
+  document.getElementById('cmd').addEventListener('keydown', e => {
+    if (e.key === 'Enter') handleCommand();
+  });
+  document.getElementById('api-key').addEventListener('keydown', e => {
+    if (e.key === 'Enter') startGame(false);
+  });
+});
+</script>
+</body>
+</html>
