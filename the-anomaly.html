@@ -2224,7 +2224,6 @@ const Music = (() => {
   let ctx = null, master = null, verb = null;
   let muted = false, beat = 0, nextBeat = 0;
   let noiseBuffer = null;  // shared noise buffer for percussion + breath
-  let rideSrc = null;      // looping brushed ride cymbal
   const TEMPO = 48;         // BPM — slow, heavy, brooding
   const SPB   = 60 / TEMPO;
 
@@ -2402,23 +2401,24 @@ const Music = (() => {
     osc.start(t); osc.stop(t + dur + 0.1);
   }
 
-  // Continuous brushed ride cymbal — the backbone of the jazz feel
-  function startRide() {
-    if (rideSrc) return;
-    rideSrc = ctx.createBufferSource();
-    rideSrc.buffer = noiseBuffer;
-    rideSrc.loop = true;
+  // Ride cymbal tick — one "tsh" hit per beat, brush on metal feel
+  function playRide(t) {
+    t += jitter() * 0.5;
+    const ns = ctx.createBufferSource();
+    ns.buffer = noiseBuffer;
     const hp = ctx.createBiquadFilter();
-    hp.type = 'highpass'; hp.frequency.value = 7500; hp.Q.value = 0.4;
+    hp.type = 'highpass'; hp.frequency.value = 6000; hp.Q.value = 0.5;
     const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass'; lp.frequency.value = 16000;
+    lp.type = 'lowpass'; lp.frequency.value = 14000;
     const g = ctx.createGain();
-    g.gain.value = 0.020; // very soft shimmer
-    rideSrc.connect(hp); hp.connect(lp); lp.connect(g); g.connect(master);
-    rideSrc.start();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.052, t + 0.007); // crisp attack
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.30); // natural decay
+    ns.connect(hp); hp.connect(lp); lp.connect(g); g.connect(master);
+    ns.start(t); ns.stop(t + 0.32);
   }
 
-  // Ghost brush snare — on beats 4 and 12 (every 2 bars, backbeat feel)
+  // Ghost brush snare — beat 4 of every bar (positions 3, 7, 11, 15)
   function playBrushSnare(t) {
     t += jitter() * 0.3;
     // Snare body: bandpass noise
@@ -2427,20 +2427,20 @@ const Music = (() => {
     bp.type = 'bandpass'; bp.frequency.value = 210; bp.Q.value = 1.0;
     const g1 = ctx.createGain();
     g1.gain.setValueAtTime(0, t);
-    g1.gain.linearRampToValueAtTime(0.030, t + 0.005);
-    g1.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+    g1.gain.linearRampToValueAtTime(0.065, t + 0.005);
+    g1.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
     ns1.connect(bp); bp.connect(g1); g1.connect(master);
     // Wire sizzle: highpass noise
     const ns2 = ctx.createBufferSource(); ns2.buffer = noiseBuffer;
     const szhp = ctx.createBiquadFilter();
-    szhp.type = 'highpass'; szhp.frequency.value = 3800; szhp.Q.value = 0.5;
+    szhp.type = 'highpass'; szhp.frequency.value = 3500; szhp.Q.value = 0.5;
     const g2 = ctx.createGain();
     g2.gain.setValueAtTime(0, t);
-    g2.gain.linearRampToValueAtTime(0.016, t + 0.003);
-    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    g2.gain.linearRampToValueAtTime(0.038, t + 0.003);
+    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
     ns2.connect(szhp); szhp.connect(g2); g2.connect(master);
-    ns1.start(t); ns1.stop(t + 0.15);
-    ns2.start(t); ns2.stop(t + 0.10);
+    ns1.start(t); ns1.stop(t + 0.18);
+    ns2.start(t); ns2.stop(t + 0.13);
   }
 
   function schedule() {
@@ -2449,11 +2449,14 @@ const Music = (() => {
     while (nextBeat < now + 0.3) {
       const b = beat % 16;
 
+      // Ride cymbal on every beat
+      playRide(nextBeat);
+
       // Walking bass every beat (null = rest)
       if (BASS[b] !== null) playBass(BASS[b], nextBeat);
 
-      // Ghost snare on backbeats of bars 1 and 3
-      if (b === 3 || b === 11) playBrushSnare(nextBeat);
+      // Ghost snare on beat 4 of every bar (positions 3, 7, 11, 15)
+      if (b === 3 || b === 7 || b === 11 || b === 15) playBrushSnare(nextBeat);
 
       // On phrase downbeat, schedule all chords + melody
       if (b === 0) {
@@ -2485,7 +2488,6 @@ const Music = (() => {
       verb.connect(vg); vg.connect(master);
       master.connect(ctx.destination);
       noiseBuffer = makeNoiseBuffer(2.0);
-      startRide();
       nextBeat = ctx.currentTime + 0.5;
       beat     = 0;
       schedule();
