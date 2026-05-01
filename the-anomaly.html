@@ -1476,8 +1476,11 @@ const SceneRenderer = (() => {
 
   function init() {
     cv = document.getElementById('scene-canvas');
-    cv.width = NW; cv.height = NH;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width  = NW * dpr;
+    cv.height = NH * dpr;
     cx = cv.getContext('2d');
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0); // scale all drawing to device pixels
   }
 
   // ── primitives ──────────────────────────────────────────
@@ -2109,32 +2112,54 @@ const SceneAnimator = (() => {
           particles.push(mkP(4+Math.random()*(NW-12), 58+Math.random()*16, (Math.random()-.5)*.2, -(0.3+Math.random()*.3), '#3070b8', 0.08+Math.random()*.10, 2+Math.random()*3, 0.988));
       },
       extra(t) {
-        // Lantern flicker — very gentle warm pulse over the lantern zone
-        const f = (Math.sin(t*6.4)+1)*.5*.018;
-        ctx.globalAlpha = f;
+        // Lantern flicker — warm pulse over the lantern zone
+        const f = 0.06 + Math.sin(t*6.4)*0.05 + Math.sin(t*11.1)*0.02;
+        ctx.globalAlpha = Math.max(0, f);
         ctx.fillStyle = '#c03008';
         ctx.fillRect(0,38,NW,22);
         ctx.globalAlpha = 1;
       }
     },
     uptown: {
-      emit() { /* shadow district is mostly still */ },
+      emit() {
+        // Detached shadow fragments — shadows peeling away from their objects
+        if (particles.length < MAX_P && Math.random() < 0.07)
+          particles.push(mkP(
+            6 + Math.random()*(NW-12), NH-8-Math.random()*20,
+            (Math.random()-.5)*0.5, -(0.04+Math.random()*0.08),
+            '#00000e', 0.32+Math.random()*0.28,
+            Math.random()>.45 ? 3 : 2, 0.974
+          ));
+      },
       extra(t) {
-        // Flicker the floor-level light pools (not a halo — just the ground glow)
-        const lf = Math.max(0, Math.sin(t*11.4)*.022);
-        if (lf > 0) {
-          [18,58,98,140,180,222,262,302].forEach(lx => {
-            ctx.globalAlpha = lf;
-            const fp = ctx.createRadialGradient(lx,NH-7,0,lx,NH-7,13);
-            fp.addColorStop(0,'rgba(192,112,16,0.7)'); fp.addColorStop(1,'rgba(192,112,16,0)');
-            ctx.fillStyle = fp; ctx.fillRect(lx-13,NH-14,26,14);
-            ctx.globalAlpha = 1;
-          });
-        }
-        // Shadow shimmer — a slow dark pulse at ground level (the anomaly breathing)
-        ctx.globalAlpha = 0.018+Math.abs(Math.sin(t*3.1))*.022;
+        // Animated lamppost shadows — they swing independently, ignoring physics
+        [18,58,98,140,180,222,262,302].forEach((lx,i) => {
+          const sway = Math.sin(t*0.65 + i*1.05) * 8; // each lamp drifts at its own phase
+          ctx.globalAlpha = 0.50;
+          ctx.fillStyle = '#00000c';
+          ctx.beginPath();
+          ctx.moveTo(lx+1, NH-20);         // shadow root: lamp base
+          ctx.lineTo(lx+sway,   NH-2);     // tip left
+          ctx.lineTo(lx+sway+2, NH-2);     // tip right
+          ctx.closePath();
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        });
+
+        // Lamp pools — clearly flickering, each at a slightly different phase
+        [18,58,98,140,180,222,262,302].forEach((lx,i) => {
+          const f = 0.13 + Math.sin(t*10.8+i*0.7)*0.09 + Math.sin(t*6.3+i*0.4)*0.04;
+          ctx.globalAlpha = Math.max(0.05, f);
+          const fp = ctx.createRadialGradient(lx,NH-7,0,lx,NH-7,14);
+          fp.addColorStop(0,'rgba(192,112,16,0.78)'); fp.addColorStop(1,'rgba(192,112,16,0)');
+          ctx.fillStyle = fp; ctx.fillRect(lx-14,NH-15,28,15);
+          ctx.globalAlpha = 1;
+        });
+
+        // Street-level dark pulse — the district "breathing"
+        ctx.globalAlpha = 0.04 + Math.abs(Math.sin(t*2.6))*0.06;
         ctx.fillStyle = '#000008';
-        ctx.fillRect(0,NH-18,NW,14);
+        ctx.fillRect(0, NH-22, NW, 18);
         ctx.globalAlpha = 1;
       }
     },
@@ -2210,7 +2235,7 @@ const SceneAnimator = (() => {
       stop();
       curLoc=locId; elapsed=0;
       if (!cv) { cv=document.getElementById('scene-canvas'); ctx=cv.getContext('2d'); }
-      bgData=ctx.getImageData(0,0,NW,NH);
+      bgData=ctx.getImageData(0,0,cv.width,cv.height);
       rafId=requestAnimationFrame(tick);
     },
     stop,
