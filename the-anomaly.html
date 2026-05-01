@@ -485,9 +485,9 @@ body::after {
     <div class="api-label">Anthropic API Key</div>
     <input class="api-input" id="api-key" type="password"
            placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
-    <div class="api-warning">
-      Your key goes directly to the Anthropic API and is never stored anywhere.
-      Close this tab when you're done.
+    <div class="api-warning" id="api-warning">
+      Your key is saved in this browser only and sent directly to the Anthropic API.
+      <span id="forget-key-row" style="display:none"> · <a href="#" id="forget-key-link" style="color:var(--text-dim);text-decoration:underline;cursor:pointer">forget key</a></span>
     </div>
     <div class="splash-start-row">
       <button class="btn btn-primary" onclick="startGame(false)">Begin Investigation</button>
@@ -1408,6 +1408,8 @@ function startGame(resume = false) {
   }
 
   S.apiKey = key;
+  // Persist key for future visits
+  try { localStorage.setItem('the-anomaly-apikey', key); } catch(_) {}
 
   const restoring = resume && SaveManager.load();
   if (!restoring) SaveManager.clear();
@@ -2526,6 +2528,20 @@ const Sounds = (() => {
 
 document.addEventListener('DOMContentLoaded', () => {
   initRain();
+
+  // Pre-fill saved API key
+  const savedKey = (() => { try { return localStorage.getItem('the-anomaly-apikey') || ''; } catch(_) { return ''; } })();
+  if (savedKey) {
+    document.getElementById('api-key').value = savedKey;
+    document.getElementById('forget-key-row').style.display = '';
+    document.getElementById('forget-key-link').addEventListener('click', e => {
+      e.preventDefault();
+      try { localStorage.removeItem('the-anomaly-apikey'); } catch(_) {}
+      document.getElementById('api-key').value = '';
+      document.getElementById('forget-key-row').style.display = 'none';
+      document.getElementById('api-key').focus();
+    });
+  }
 
   // Show resume button if a previous save exists
   if (SaveManager.hasSave()) {
