@@ -108,6 +108,6 @@ Wrong accusation? Jerome will reconsider. Right accusation? Case closed.
 - Single `index.html` file — no framework, no build tools
 - Calls `api.anthropic.com/v1/messages` directly from the browser
 - Requires the `anthropic-dangerous-direct-browser-access: true` header (supported by Anthropic for browser use cases)
-- Model: `claude-sonnet-4-20250514`
+- Model: `claude-sonnet-4-6`
 - All game state lives in JS memory (resets on page reload)
 - API key stored in `localStorage` under key `jerome_key`
